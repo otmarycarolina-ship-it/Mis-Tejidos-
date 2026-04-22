@@ -44,10 +44,23 @@ export default function SakuraApp() {
   const [filter, setFilter] = useState('Todos');
   const [loading, setLoading] = useState(true);
   
-  // Estados para Edición
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '' });
+
+  // Detectar si venimos de un enlace de WhatsApp para un producto específico
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get('id');
+    if (productId && items.length > 0) {
+      const specificItem = items.find(i => i.id === productId);
+      if (specificItem) {
+        // Si quieres que solo se vea ese producto al abrir el link:
+        setItems([specificItem]);
+        setFilter(specificItem.category);
+      }
+    }
+  }, [items]);
 
   useEffect(() => {
     signInAnonymously(auth).catch(console.error);
@@ -88,11 +101,9 @@ export default function SakuraApp() {
   const saveItem = async (e) => {
     e.preventDefault();
     if (!newItem.image || !newItem.price) return alert("Completa los datos");
-    
     try {
       if (isEditing) {
-        const docRef = doc(db, 'products', editId);
-        await updateDoc(docRef, {
+        await updateDoc(doc(db, 'products', editId), {
           price: parseFloat(newItem.price),
           category: newItem.category,
           image: newItem.image
@@ -126,9 +137,10 @@ export default function SakuraApp() {
 
   const sendWhatsApp = (item) => {
     const phoneNumber = "584226388324";
-    // Usamos el link de la página actual para que tú puedas entrar y ver el catálogo
-    const pageLink = window.location.href;
-    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}\n*Precio:* ${item.price.toLocaleString()} COP\n\nLink del catálogo: ${pageLink}`;
+    // El enlace ahora lleva el ID único del producto
+    const baseUrl = window.location.origin + window.location.pathname;
+    const productLink = `${baseUrl}?id=${item.id}`;
+    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}\n*Precio:* ${item.price.toLocaleString()} COP\n\nLink del pedido:\n${productLink}`;
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -137,9 +149,12 @@ export default function SakuraApp() {
       
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b-4 border-white p-5 flex justify-between items-center rounded-b-[2.5rem] shadow-sm">
-        <div className="flex items-center gap-2">
-          <Heart size={24} fill={COLORS.sakuraPink} color={COLORS.sakuraPink} />
-          <h1 className="text-xl font-black" style={{ color: COLORS.deepRose }}>Mis Tejidos</h1>
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <Heart size={22} fill={COLORS.sakuraPink} color={COLORS.sakuraPink} />
+            <h1 className="text-xl font-black" style={{ color: COLORS.deepRose }}>Mis Tejidos</h1>
+          </div>
+          <span className="text-[10px] uppercase tracking-[0.2em] font-bold ml-7 text-pink-400">Hecho a mano</span>
         </div>
         <div className="flex gap-3">
           <button onClick={() => setShowInfo(true)} className="p-2 bg-pink-100 rounded-xl text-pink-500">
@@ -163,22 +178,22 @@ export default function SakuraApp() {
         ))}
       </div>
 
-      {/* Grid */}
+      {/* Grid de Productos */}
       <main className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-8">
         {loading ? (
-          <div className="col-span-full text-center py-20 text-pink-300">Cargando...</div>
+          <div className="col-span-full text-center py-20 text-pink-300">Cargando tus tejidos...</div>
         ) : filteredItems.map(item => (
-          <div key={item.id} className="bg-white rounded-[3rem] p-4 shadow-xl border-t-8 border-transparent hover:border-pink-100 transition-all">
-            <div className="relative aspect-[4/5] rounded-[2.2rem] overflow-hidden bg-pink-50 mb-4">
-              <img src={item.image} className="w-full h-full object-cover" />
+          <div key={item.id} className="bg-white rounded-[3rem] p-4 shadow-xl transition-all">
+            <div className="relative aspect-square rounded-[2.2rem] overflow-hidden bg-[#FAF7F2] mb-4 border border-pink-50">
+              <img 
+                src={item.image} 
+                className="w-full h-full object-contain p-2" // Object-contain para ver la pieza completa
+                alt={item.category}
+              />
               {isAdmin && (
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
-                  <button onClick={() => openEdit(item)} className="bg-white/90 p-3 rounded-2xl text-blue-500 shadow-lg">
-                    <Pencil size={20} />
-                  </button>
-                  <button onClick={() => deleteDoc(doc(db, 'products', item.id))} className="bg-white/90 p-3 rounded-2xl text-red-500 shadow-lg">
-                    <Trash2 size={20} />
-                  </button>
+                  <button onClick={() => openEdit(item)} className="bg-white/90 p-3 rounded-2xl text-blue-500 shadow-lg"><Pencil size={20} /></button>
+                  <button onClick={() => deleteDoc(doc(db, 'products', item.id))} className="bg-white/90 p-3 rounded-2xl text-red-500 shadow-lg"><Trash2 size={20} /></button>
                 </div>
               )}
             </div>
@@ -186,7 +201,7 @@ export default function SakuraApp() {
               <h3 className="text-2xl font-black mb-1" style={{ color: COLORS.deepRose }}>{item.category}</h3>
               <p className="text-xl font-bold mb-4">{item.price.toLocaleString()} COP</p>
               <button onClick={() => sendWhatsApp(item)}
-                className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95"
+                className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 shadow-pink-200"
                 style={{ backgroundColor: COLORS.sakuraPink }}
               >
                 <MessageCircle size={20} fill="white" /> Pedir por WhatsApp
@@ -205,19 +220,28 @@ export default function SakuraApp() {
         </button>
       )}
 
-      {/* Modal: Info Encargos */}
+      {/* Modal: ¿Cómo encargar tu pedido? */}
       {showInfo && (
         <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-6 flex items-center justify-center">
           <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl border-4 border-white">
-            <div className="p-8 text-center bg-pink-100">
-              <Heart size={32} fill={COLORS.sakuraPink} color={COLORS.sakuraPink} className="mx-auto mb-2" />
-              <h2 className="text-2xl font-black text-pink-600">¿Cómo encargar?</h2>
+            <div className="p-8 text-center bg-pink-50">
+              <Sparkles size={32} color={COLORS.sakuraPink} className="mx-auto mb-2" />
+              <h2 className="text-xl font-black text-pink-600 leading-tight">¿Cómo encargar tu pedido?</h2>
             </div>
-            <div className="p-8 space-y-4">
-              <div className="flex gap-3"><Wallet className="text-pink-400"/> <p className="text-sm">Anticipo del <b>50%</b> para agendar.</p></div>
-              <div className="flex gap-3"><AlertCircle className="text-red-400"/> <p className="text-sm">No hay devolución de anticipo por cancelación.</p></div>
-              <div className="flex gap-3"><Clock className="text-amber-400"/> <p className="text-sm">Tiempo de entrega varía según el diseño.</p></div>
-              <button onClick={() => setShowInfo(false)} className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold mt-4">¡Entendido! ♡</button>
+            <div className="p-8 space-y-6 text-center">
+              <div className="space-y-2">
+                <Wallet className="mx-auto text-pink-400" size={24}/>
+                <p className="text-[15px] leading-relaxed">Todos los pedidos se realizan con un <b>anticipo del 50%</b> para asegurar tu lugar en la agenda.</p>
+              </div>
+              <div className="space-y-2">
+                <AlertCircle className="mx-auto text-red-300" size={24}/>
+                <p className="text-[15px] leading-relaxed">En caso de cancelación de algún pedido <b>no se devolverá el anticipo</b>.</p>
+              </div>
+              <div className="space-y-2">
+                <Clock className="mx-auto text-amber-300" size={24}/>
+                <p className="text-[15px] leading-relaxed">Como son piezas hechas a mano, el <b>tiempo de entrega varía</b> según el diseño.</p>
+              </div>
+              <button onClick={() => setShowInfo(false)} className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold mt-4 shadow-lg shadow-pink-100">¡Entendido! ♡</button>
             </div>
           </div>
         </div>
@@ -229,29 +253,29 @@ export default function SakuraApp() {
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl">
             <h2 className="text-2xl font-bold mb-6 text-center">{isEditing ? 'Editar Diseño' : 'Nueva Creación'}</h2>
             <div className="space-y-4">
-              <label className="block w-full h-40 bg-pink-50 rounded-3xl border-4 border-dashed border-pink-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden">
-                {newItem.image ? <img src={newItem.image} className="w-full h-full object-cover" /> : <Camera className="text-pink-200" size={40} />}
+              <label className="block w-full h-48 bg-pink-50 rounded-3xl border-4 border-dashed border-pink-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative">
+                {newItem.image ? <img src={newItem.image} className="w-full h-full object-contain" /> : <Camera className="text-pink-200" size={40} />}
                 <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
               </label>
-              <select className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
+              <select className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-pink-300" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <input type="number" placeholder="Precio COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
-              <button onClick={saveItem} className="w-full py-4 bg-pink-600 text-white rounded-2xl font-bold shadow-xl">
+              <input type="number" placeholder="Precio COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-pink-300" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
+              <button onClick={saveItem} className="w-full py-4 bg-pink-600 text-white rounded-2xl font-bold shadow-xl active:scale-95 transition-transform">
                 {isEditing ? 'Guardar Cambios' : 'Publicar'}
               </button>
-              <button onClick={closeModal} className="w-full text-gray-400 font-bold">Cancelar</button>
+              <button onClick={closeModal} className="w-full text-gray-400 font-bold py-2">Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal: Login */}
+      {/* Login Admin */}
       {showAdminLogin && (
         <div className="fixed inset-0 z-[60] bg-pink-50/90 backdrop-blur-sm flex items-center justify-center p-4">
           <form onSubmit={handleLogin} className="bg-white p-8 rounded-[2.5rem] w-full max-w-xs text-center shadow-xl border border-pink-100">
             <h2 className="text-xl font-bold mb-6">Acceso Admin</h2>
-            <input type="password" placeholder="PIN" className="w-full p-4 bg-gray-50 rounded-2xl text-center mb-4" value={adminPass} onChange={e => setAdminPass(e.target.value)} />
+            <input type="password" placeholder="PIN" className="w-full p-4 bg-gray-50 rounded-2xl text-center mb-4 focus:ring-2 focus:ring-pink-300 border-none" value={adminPass} onChange={e => setAdminPass(e.target.value)} />
             <button className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold shadow-lg">Entrar</button>
             <button type="button" onClick={() => setShowAdminLogin(false)} className="mt-4 text-gray-300">Cerrar</button>
           </form>
