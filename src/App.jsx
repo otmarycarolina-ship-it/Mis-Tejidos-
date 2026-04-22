@@ -1,23 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  onSnapshot, 
-  setDoc, 
-  deleteDoc
+  getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, query, orderBy 
 } from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { 
-  getAuth, 
-  signInAnonymously, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  Plus, Trash2, Info, Lock, Unlock, Camera, MessageCircle, X, Upload, Heart, Sparkles, Clock, Wallet, AlertCircle
+  Plus, Trash2, Info, Lock, Unlock, MessageCircle, Heart, Sparkles, X, Camera, ShoppingBag
 } from 'lucide-react';
 
-// --- TUS CREDENCIALES DE LA FOTO ---
+// Configuración obtenida de tus capturas
 const firebaseConfig = {
   apiKey: "AIzaSyC46KE_P0F7Vs382fpm1zyl3oUjxRPK9oI",
   authDomain: "mis-tejidos.firebaseapp.com",
@@ -31,43 +22,39 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = 'crochet-alegre-app';
 
 const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Vestidos de Bebé", "Tapetes", "Bolsos", "Otros"];
 
 const COLORS = {
-  tickleMePink: '#F283AF',
-  champagne: '#FBF4EB',
-  blush: '#FBD9E5',
-  raspberryRose: '#C43670',
-  text: '#5D4037'
+  sakuraPink: '#F283AF', // El rosa de tu marca
+  softCream: '#FBF4EB',
+  deepRose: '#C43670',
+  glassWhite: 'rgba(255, 255, 255, 0.8)'
 };
 
-export default function App() {
+export default function SakuraApp() {
   const [user, setUser] = useState(null);
   const [items, setItems] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminPass, setAdminPass] = useState('');
-  const [showInfo, setShowInfo] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [filter, setFilter] = useState('Todos');
   const [loading, setLoading] = useState(true);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
-
   const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '' });
 
+  // Autenticación Anónima para seguridad de Firebase
   useEffect(() => {
     signInAnonymously(auth).catch(console.error);
     return onAuthStateChanged(auth, setUser);
   }, []);
 
+  // Carga de productos en tiempo real
   useEffect(() => {
     if (!user) return;
-    const itemsCol = collection(db, 'products'); // Simplificado para tu nueva base
-    return onSnapshot(itemsCol, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setItems(data.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
+    const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     });
   }, [user]);
@@ -76,16 +63,18 @@ export default function App() {
     filter === 'Todos' ? items : items.filter(i => i.category === filter)
   , [items, filter]);
 
-  const formatPrice = (p) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(p) + " COP";
-
   const handleLogin = (e) => {
     e.preventDefault();
-    if (adminPass === '1206') { setIsAdmin(true); setShowAdminLogin(false); setAdminPass(''); }
+    if (adminPass === '1206') { 
+      setIsAdmin(true); 
+      setShowAdminLogin(false); 
+      setAdminPass(''); 
+    }
   };
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
-    if (file && file.size < 800000) {
+    if (file) {
       const reader = new FileReader();
       reader.onloadend = () => setNewItem(prev => ({ ...prev, image: reader.result }));
       reader.readAsDataURL(file);
@@ -94,100 +83,187 @@ export default function App() {
 
   const addItem = async (e) => {
     e.preventDefault();
+    if (!newItem.image || !newItem.price) return alert("Por favor rellena todo");
     const id = Date.now().toString();
-    await setDoc(doc(db, 'products', id), { ...newItem, id, price: parseFloat(newItem.price), createdAt: new Date().toISOString() });
+    await setDoc(doc(db, 'products', id), { 
+      ...newItem, 
+      id, 
+      price: parseFloat(newItem.price), 
+      createdAt: new Date().toISOString() 
+    });
     setShowAddModal(false);
     setNewItem({ price: '', category: 'Blusas', image: '' });
   };
 
-  const deleteItem = async (id) => {
-    await deleteDoc(doc(db, 'products', id));
-    setShowDeleteConfirm(null);
+  // Función de WhatsApp mejorada con enlace de imagen
+  const sendWhatsApp = (item) => {
+    const phoneNumber = "584226388324";
+    const message = `¡Hola Otmary! ✨ Me interesa este diseño:\n\n*Categoría:* ${item.category}\n*Precio:* ${item.price} COP\n*Ver imagen:* ${item.image.startsWith('data') ? '[Imagen adjunta en App]' : item.image}`;
+    const encodedMessage = encodeURIComponent(message);
+    window.open(`https://wa.me/${phoneNumber}?text=${encodedMessage}`, '_blank');
   };
 
   return (
-    <div className="min-h-screen pb-20" style={{ backgroundColor: COLORS.champagne, color: COLORS.text, fontFamily: 'Quicksand, sans-serif' }}>
-      {/* Cabecera */}
-      <header className="sticky top-0 z-30 p-5 flex justify-between items-center rounded-b-[2.5rem] shadow-lg text-white" style={{ backgroundColor: COLORS.tickleMePink }}>
+    <div className="min-h-screen pb-24" style={{ backgroundColor: COLORS.softCream, fontFamily: "'Quicksand', sans-serif" }}>
+      
+      {/* Header Estilo "Sakura" */}
+      <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-md border-b border-pink-100 p-5 flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <Heart size={24} fill="white" />
-          <h1 className="text-xl font-black">Mis Tejidos ♡</h1>
+          <div className="bg-pink-100 p-2 rounded-full">
+            <Heart size={20} fill={COLORS.sakuraPink} color={COLORS.sakuraPink} />
+          </div>
+          <h1 className="text-xl font-bold tracking-tight" style={{ color: COLORS.deepRose }}>Mis Tejidos</h1>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setShowInfo(true)} className="p-2 bg-white/20 rounded-xl"><Info /></button>
-          <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className="p-2 bg-white/20 rounded-xl">
-            {isAdmin ? <Unlock /> : <Lock />}
-          </button>
-        </div>
+        <button 
+          onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)}
+          className="text-pink-300 hover:text-pink-500 transition-colors"
+        >
+          {isAdmin ? <Unlock size={22} /> : <Lock size={22} />}
+        </button>
       </header>
 
-      {/* Filtros */}
-      <div className="flex overflow-x-auto p-4 gap-2 no-scrollbar">
+      {/* Categorías (Pestañas suaves) */}
+      <div className="flex overflow-x-auto p-4 gap-3 no-scrollbar">
         {['Todos', ...CATEGORIES].map(cat => (
-          <button key={cat} onClick={() => setFilter(cat)} className={`px-4 py-2 rounded-full font-bold whitespace-nowrap ${filter === cat ? 'bg-pink-500 text-white' : 'bg-white'}`}>
+          <button 
+            key={cat} 
+            onClick={() => setFilter(cat)}
+            className={`px-5 py-2 rounded-2xl font-semibold transition-all duration-300 whitespace-nowrap shadow-sm
+              ${filter === cat ? 'bg-pink-500 text-white scale-105' : 'bg-white text-pink-400 hover:bg-pink-50'}`}
+          >
             {cat}
           </button>
         ))}
       </div>
 
-      {/* Grid de Productos */}
-      <main className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredItems.map(item => (
-          <div key={item.id} className="bg-white rounded-[2rem] p-4 shadow-md">
-            <div className="aspect-square rounded-[1.5rem] overflow-hidden bg-gray-100 mb-4">
-              <img src={item.image} className="w-full h-full object-cover" />
+      {/* Grid de Productos - Diseño de Tarjetas */}
+      <main className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-6">
+        {loading ? (
+          <div className="col-span-full text-center py-20 text-pink-300 animate-pulse">Cargando tus maravillas...</div>
+        ) : filteredItems.map(item => (
+          <div key={item.id} className="group bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-pink-50 hover:shadow-xl transition-all duration-500">
+            <div className="relative aspect-square overflow-hidden">
+              <img src={item.image} alt="Tejido" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+              <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-pink-600 shadow-sm">
+                {item.category}
+              </div>
+              {isAdmin && (
+                <button 
+                  onClick={() => deleteDoc(doc(db, 'products', item.id))}
+                  className="absolute top-4 right-4 bg-red-500/80 p-2 rounded-full text-white backdrop-blur-sm"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
-            <h3 className="text-lg font-bold">{item.category}</h3>
-            <p className="text-xl font-black text-pink-600">{formatPrice(item.price)}</p>
-            <button 
-              onClick={() => window.open(`https://wa.me/584226388324?text=Hola! Me interesa el diseño: ${item.category}`)}
-              className="w-full mt-3 py-3 rounded-xl bg-pink-400 text-white font-bold flex justify-center gap-2"
-            >
-              <MessageCircle size={20}/> Pedir por WhatsApp
-            </button>
-            {isAdmin && <button onClick={() => setShowDeleteConfirm(item.id)} className="mt-2 text-red-400 w-full text-sm">Eliminar</button>}
+            
+            <div className="p-6">
+              <div className="flex justify-between items-end mb-4">
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">Disponible</p>
+                  <p className="text-2xl font-black text-gray-800">{item.price.toLocaleString()} <span className="text-sm font-normal">COP</span></p>
+                </div>
+                <div className="bg-pink-50 p-2 rounded-xl text-pink-400">
+                  <Sparkles size={20} />
+                </div>
+              </div>
+
+              <button 
+                onClick={() => sendWhatsApp(item)}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-pink-400 to-pink-500 text-white font-bold flex items-center justify-center gap-3 shadow-lg shadow-pink-200 active:scale-95 transition-transform"
+              >
+                <MessageCircle size={20} />
+                Pedir por WhatsApp
+              </button>
+            </div>
           </div>
         ))}
       </main>
 
-      {/* Botón Flotante Admin */}
+      {/* Botón Flotante para Otmary (Admin) */}
       {isAdmin && (
-        <button onClick={() => setShowAddModal(true)} className="fixed bottom-6 right-6 w-14 h-14 bg-pink-600 text-white rounded-full shadow-xl flex items-center justify-center">
-          <Plus size={30} />
+        <button 
+          onClick={() => setShowAddModal(true)}
+          className="fixed bottom-8 right-8 w-16 h-16 bg-gray-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:rotate-90 transition-transform duration-500 z-50"
+        >
+          <Plus size={32} />
         </button>
       )}
 
-      {/* Modal Agregar (Simplificado) */}
+      {/* Modal: Agregar Producto */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center">
-          <div className="bg-white w-full rounded-3xl p-6">
-            <h2 className="text-xl font-bold mb-4">Nuevo Tejido</h2>
-            <select className="w-full p-3 border rounded-xl mb-3" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <input type="number" placeholder="Precio COP" className="w-full p-3 border rounded-xl mb-3" onChange={e => setNewItem({...newItem, price: e.target.value})} />
-            <input type="file" accept="image/*" onChange={handleImageUpload} className="mb-4" />
-            <button onClick={addItem} className="w-full py-3 bg-pink-600 text-white rounded-xl font-bold">Publicar ✨</button>
-            <button onClick={() => setShowAddModal(false)} className="w-full mt-2 text-gray-500">Cancelar</button>
+        <div className="fixed inset-0 z-[60] bg-gray-900/40 backdrop-blur-sm p-4 flex items-center justify-center">
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Nueva Creación ✨</h2>
+              <button onClick={() => setShowAddModal(false)} className="bg-gray-100 p-2 rounded-full"><X size={20}/></button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-3xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center min-h-[150px] relative overflow-hidden">
+                {newItem.image ? (
+                  <img src={newItem.image} className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <>
+                    <Camera className="text-gray-300 mb-2" size={40} />
+                    <p className="text-xs text-gray-400">Sube la foto del tejido</p>
+                  </>
+                )}
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+              </div>
+
+              <select 
+                className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-pink-300"
+                value={newItem.category} 
+                onChange={e => setNewItem({...newItem, category: e.target.value})}
+              >
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+
+              <input 
+                type="number" 
+                placeholder="Precio en COP" 
+                className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-pink-300"
+                onChange={e => setNewItem({...newItem, price: e.target.value})} 
+              />
+
+              <button 
+                onClick={addItem} 
+                className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold shadow-xl hover:bg-black transition-colors"
+              >
+                Publicar en la Tienda
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Login Admin */}
+      {/* Modal: Login Admin */}
       {showAdminLogin && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={handleLogin} className="bg-white p-6 rounded-3xl w-full max-w-xs text-center">
-            <h2 className="font-bold mb-4">Acceso Admin</h2>
-            <input type="password" placeholder="PIN" className="w-full p-3 border rounded-xl mb-3 text-center" value={adminPass} onChange={e => setAdminPass(e.target.value)} />
-            <button className="w-full py-3 bg-pink-600 text-white rounded-xl">Entrar</button>
+        <div className="fixed inset-0 z-[60] bg-pink-50/90 backdrop-blur-md flex items-center justify-center p-4">
+          <form onSubmit={handleLogin} className="bg-white p-8 rounded-[2.5rem] w-full max-w-xs text-center shadow-xl border border-pink-100">
+            <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-4 text-pink-500">
+              <Lock size={30} />
+            </div>
+            <h2 className="text-xl font-bold mb-6 text-gray-800">Panel de Control</h2>
+            <input 
+              type="password" 
+              placeholder="Ingresa el PIN" 
+              className="w-full p-4 bg-gray-50 rounded-2xl border-none text-center mb-4 focus:ring-2 focus:ring-pink-300"
+              value={adminPass} 
+              onChange={e => setAdminPass(e.target.value)} 
+            />
+            <button className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold">Entrar</button>
+            <button type="button" onClick={() => setShowAdminLogin(false)} className="mt-4 text-gray-400 text-sm">Cerrar</button>
           </form>
         </div>
       )}
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap');
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        body { margin: 0; padding: 0; overflow-x: hidden; }
       `}</style>
     </div>
   );
-                                              }
+}
