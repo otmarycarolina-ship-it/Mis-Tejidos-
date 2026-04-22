@@ -1,28 +1,39 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
 import { 
-  Plus, 
-  Trash2, 
-  Info, 
-  Lock, 
-  Unlock, 
-  Camera, 
-  MessageCircle, 
-  X,
-  Heart,
-  Sparkles,
-  Clock,
-  Wallet,
-  AlertCircle
+  getFirestore, 
+  collection, 
+  doc, 
+  onSnapshot, 
+  setDoc, 
+  deleteDoc
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  Plus, Trash2, Info, Lock, Unlock, Camera, MessageCircle, X, Upload, Heart, Sparkles, Clock, Wallet, AlertCircle
 } from 'lucide-react';
 
-// --- CONFIGURACIÓN DE AIRTABLE (TUS LLAVES) ---
-const AIRTABLE_TOKEN = "PatiCO2pgfZdCBlbO.ef033cf483063ade401d8548ad105f941ca2155536d09bec9e36add7dbb7d903";
-const BASE_ID = "app7V3iZvWH8gVQlO";
-const TABLE_NAME = "Productos"; // Asegúrate de que en Airtable la pestaña se llame exactamente así
+// --- TUS CREDENCIALES DE LA FOTO ---
+const firebaseConfig = {
+  apiKey: "AIzaSyC46KE_P0F7Vs382fpm1zyl3oUjxRPK9oI",
+  authDomain: "mis-tejidos.firebaseapp.com",
+  projectId: "mis-tejidos",
+  storageBucket: "mis-tejidos.firebasestorage.app",
+  messagingSenderId: "1034971710057",
+  appId: "1:1034971710057:web:e501d5408f5f0e303718f8",
+  measurementId: "G-Y6HL27L34Y"
+};
 
-const CATEGORIES = [
-  "Blusas", "Flores", "Llaveros", "Vestidos de Bebé", "Tapetes", "Bolsos", "Otros"
-];
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = 'crochet-alegre-app';
+
+const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Vestidos de Bebé", "Tapetes", "Bolsos", "Otros"];
 
 const COLORS = {
   tickleMePink: '#F283AF',
@@ -33,210 +44,150 @@ const COLORS = {
 };
 
 export default function App() {
+  const [user, setUser] = useState(null);
   const [items, setItems] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminPass, setAdminPass] = useState('');
   const [showInfo, setShowInfo] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [filter, setFilter] = useState('Todos');
   const [loading, setLoading] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
-  // Función para traer los datos desde Airtable
-  const fetchAirtableData = async () => {
-    try {
-      const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`, {
-        headers: { Authorization: `Bearer ${AIRTABLE_TOKEN}` }
-      });
-      const data = await response.json();
-      
-      const formattedData = data.records.map(record => ({
-        id: record.id,
-        nombre: record.fields.Nombre || "Sin nombre",
-        price: record.fields.Precio || 0,
-        category: record.fields.Categoría || "Otros",
-        image: record.fields.Fotos ? record.fields.Fotos[0].url : null
-      }));
-
-      setItems(formattedData);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error al conectar con Airtable:", error);
-      setLoading(false);
-    }
-  };
+  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '' });
 
   useEffect(() => {
-    fetchAirtableData();
+    signInAnonymously(auth).catch(console.error);
+    return onAuthStateChanged(auth, setUser);
   }, []);
 
-  const filteredItems = useMemo(() => {
-    if (filter === 'Todos') return items;
-    return items.filter(item => item.category === filter);
-  }, [items, filter]);
+  useEffect(() => {
+    if (!user) return;
+    const itemsCol = collection(db, 'products'); // Simplificado para tu nueva base
+    return onSnapshot(itemsCol, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setItems(data.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
+      setLoading(false);
+    });
+  }, [user]);
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(price) + " COP";
-  };
+  const filteredItems = useMemo(() => 
+    filter === 'Todos' ? items : items.filter(i => i.category === filter)
+  , [items, filter]);
+
+  const formatPrice = (p) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(p) + " COP";
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (adminPass === '1206') {
-      setIsAdmin(true);
-      setShowAdminLogin(false);
-    } else {
-      alert("Pin incorrecto");
-    }
-    setAdminPass('');
+    if (adminPass === '1206') { setIsAdmin(true); setShowAdminLogin(false); setAdminPass(''); }
   };
 
-  const handleWhatsApp = (item) => {
-    const phone = "584226388324";
-    const message = encodeURIComponent(`¡Hola! Me interesa encargar este diseño:\n\n✨ Producto: ${item.nombre}\n💰 Precio: ${formatPrice(item.price)}\n\nMe gustaría consultar sobre medidas y disponibilidad de colores. 😊`);
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file && file.size < 800000) {
+      const reader = new FileReader();
+      reader.onloadend = () => setNewItem(prev => ({ ...prev, image: reader.result }));
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const addItem = async (e) => {
+    e.preventDefault();
+    const id = Date.now().toString();
+    await setDoc(doc(db, 'products', id), { ...newItem, id, price: parseFloat(newItem.price), createdAt: new Date().toISOString() });
+    setShowAddModal(false);
+    setNewItem({ price: '', category: 'Blusas', image: '' });
+  };
+
+  const deleteItem = async (id) => {
+    await deleteDoc(doc(db, 'products', id));
+    setShowDeleteConfirm(null);
   };
 
   return (
-    <div className="min-h-screen pb-20" style={{ backgroundColor: COLORS.champagne, color: COLORS.text }}>
-      <header className="sticky top-0 z-30 p-5 flex justify-between items-center rounded-b-[2.5rem] shadow-lg border-b-4 border-white" style={{ backgroundColor: COLORS.tickleMePink }}>
+    <div className="min-h-screen pb-20" style={{ backgroundColor: COLORS.champagne, color: COLORS.text, fontFamily: 'Quicksand, sans-serif' }}>
+      {/* Cabecera */}
+      <header className="sticky top-0 z-30 p-5 flex justify-between items-center rounded-b-[2.5rem] shadow-lg text-white" style={{ backgroundColor: COLORS.tickleMePink }}>
         <div className="flex items-center gap-2">
-          <div className="bg-white/90 p-2 rounded-2xl shadow-inner">
-            <Heart size={24} fill={COLORS.raspberryRose} color={COLORS.raspberryRose} />
-          </div>
-          <div>
-            <h1 className="text-xl font-black text-white leading-tight">Mis Tejidos ♡</h1>
-            <span className="text-[10px] uppercase font-bold text-white/80 tracking-widest text-center">Hecho a mano por Otmary</span>
-          </div>
+          <Heart size={24} fill="white" />
+          <h1 className="text-xl font-black">Mis Tejidos ♡</h1>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowInfo(true)} className="p-3 bg-white/30 rounded-2xl text-white hover:bg-white/40 transition-colors">
-            <Info size={22} />
-          </button>
-          <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className="p-3 bg-white/30 rounded-2xl text-white hover:bg-white/40 transition-colors">
-            {isAdmin ? <Unlock size={22} /> : <Lock size={22} />}
+          <button onClick={() => setShowInfo(true)} className="p-2 bg-white/20 rounded-xl"><Info /></button>
+          <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className="p-2 bg-white/20 rounded-xl">
+            {isAdmin ? <Unlock /> : <Lock />}
           </button>
         </div>
       </header>
 
-      {/* Filtros de Categoría */}
-      <div className="flex overflow-x-auto p-5 gap-3 no-scrollbar sticky top-[88px] z-20 backdrop-blur-md bg-white/30">
-        <button 
-          onClick={() => setFilter('Todos')}
-          className={`px-6 py-3 rounded-3xl font-bold transition-all shadow-md border-2 border-white ${filter === 'Todos' ? 'text-white' : 'bg-white text-gray-500'}`}
-          style={{ backgroundColor: filter === 'Todos' ? COLORS.raspberryRose : 'white' }}
-        >Todos</button>
-        {CATEGORIES.map(cat => (
-          <button 
-            key={cat}
-            onClick={() => setFilter(cat)}
-            className={`px-6 py-3 rounded-3xl font-bold transition-all shadow-md border-2 border-white whitespace-nowrap ${filter === cat ? 'text-white' : 'bg-white text-gray-500'}`}
-            style={{ backgroundColor: filter === cat ? COLORS.raspberryRose : 'white' }}
-          >{cat}</button>
+      {/* Filtros */}
+      <div className="flex overflow-x-auto p-4 gap-2 no-scrollbar">
+        {['Todos', ...CATEGORIES].map(cat => (
+          <button key={cat} onClick={() => setFilter(cat)} className={`px-4 py-2 rounded-full font-bold whitespace-nowrap ${filter === cat ? 'bg-pink-500 text-white' : 'bg-white'}`}>
+            {cat}
+          </button>
         ))}
       </div>
 
-      <main className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-8 max-w-4xl mx-auto">
-        {loading ? (
-          <div className="col-span-full py-20 text-center flex flex-col items-center">
-            <div className="animate-bounce mb-4"><Heart size={48} fill={COLORS.tickleMePink} color={COLORS.tickleMePink} className="opacity-50" /></div>
-            <p className="font-bold opacity-50">Abriendo el catálogo...</p>
-          </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="col-span-full py-20 text-center bg-white/50 rounded-[3rem] p-10 border-2 border-dashed border-pink-200">
-            <p className="font-bold text-lg text-pink-300">No hay diseños en esta categoría aún ✨</p>
-          </div>
-        ) : (
-          filteredItems.map(item => (
-            <div key={item.id} className="bg-white rounded-[3rem] p-5 shadow-xl border-t-8 border-transparent hover:border-pink-100 transition-all group overflow-hidden">
-              <div className="aspect-[4/5] rounded-[2.5rem] overflow-hidden bg-pink-50 relative mb-5 shadow-inner">
-                {item.image ? (
-                  <img src={item.image} alt={item.nombre} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center opacity-20"><Camera size={40} /></div>
-                )}
-              </div>
-              
-              <div className="px-2">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">{item.category}</p>
-                    <h3 className="text-2xl font-black" style={{ color: COLORS.raspberryRose }}>{item.nombre}</h3>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-black">{formatPrice(item.price)}</p>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-center mb-4 font-bold opacity-60 italic">✨ Personalizable en color y medidas.</p>
-                
-                <button onClick={() => handleWhatsApp(item)} className="w-full py-4 rounded-[1.8rem] text-white font-black flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all" style={{ backgroundColor: COLORS.tickleMePink }}>
-                  <MessageCircle size={20} fill="white" />
-                  Encargar por WhatsApp
-                </button>
-              </div>
+      {/* Grid de Productos */}
+      <main className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+        {filteredItems.map(item => (
+          <div key={item.id} className="bg-white rounded-[2rem] p-4 shadow-md">
+            <div className="aspect-square rounded-[1.5rem] overflow-hidden bg-gray-100 mb-4">
+              <img src={item.image} className="w-full h-full object-cover" />
             </div>
-          ))
-        )}
+            <h3 className="text-lg font-bold">{item.category}</h3>
+            <p className="text-xl font-black text-pink-600">{formatPrice(item.price)}</p>
+            <button 
+              onClick={() => window.open(`https://wa.me/584226388324?text=Hola! Me interesa el diseño: ${item.category}`)}
+              className="w-full mt-3 py-3 rounded-xl bg-pink-400 text-white font-bold flex justify-center gap-2"
+            >
+              <MessageCircle size={20}/> Pedir por WhatsApp
+            </button>
+            {isAdmin && <button onClick={() => setShowDeleteConfirm(item.id)} className="mt-2 text-red-400 w-full text-sm">Eliminar</button>}
+          </div>
+        ))}
       </main>
 
-      {/* Botón flotante para ir a Airtable (Solo Admin) */}
+      {/* Botón Flotante Admin */}
       {isAdmin && (
-        <a href="https://airtable.com" target="_blank" rel="noreferrer" className="fixed bottom-8 right-8 w-16 h-16 rounded-full shadow-2xl text-white flex items-center justify-center hover:scale-110 active:rotate-90 transition-all z-40 border-4 border-white" style={{ backgroundColor: COLORS.raspberryRose }}>
-          <Plus size={32} strokeWidth={3} />
-        </a>
+        <button onClick={() => setShowAddModal(true)} className="fixed bottom-6 right-6 w-14 h-14 bg-pink-600 text-white rounded-full shadow-xl flex items-center justify-center">
+          <Plus size={30} />
+        </button>
       )}
 
-      {/* Modal: Información */}
-      {showInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-[3rem] w-full max-w-sm overflow-hidden shadow-2xl border-4 border-white">
-            <div className="p-8 text-center" style={{ backgroundColor: COLORS.blush }}>
-              <Heart size={32} fill={COLORS.tickleMePink} color={COLORS.tickleMePink} className="mx-auto mb-3" />
-              <h2 className="text-2xl font-black leading-tight" style={{ color: COLORS.raspberryRose }}>¿Cómo encargar tu pedido?</h2>
-            </div>
-            <div className="p-8 space-y-5">
-              <div className="flex gap-4 items-start">
-                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-pink-400 text-white"><Wallet size={16} /></div>
-                <p className="text-sm font-medium leading-relaxed">Pedidos con <b>anticipo del 50%</b> para asegurar tu lugar.</p>
-              </div>
-              <div className="flex gap-4 items-start">
-                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-red-400 text-white"><AlertCircle size={16} /></div>
-                <p className="text-sm font-medium leading-relaxed">En cancelaciones <b>no se devolverá el anticipo</b>.</p>
-              </div>
-              <div className="flex gap-4 items-start">
-                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-amber-400 text-white"><Clock size={16} /></div>
-                <p className="text-sm font-medium leading-relaxed">Piezas hechas a mano: el <b>tiempo varía</b> según el diseño.</p>
-              </div>
-            </div>
-            <button onClick={() => setShowInfo(false)} className="w-full py-5 text-white font-black text-lg" style={{ backgroundColor: COLORS.raspberryRose }}>
-              ¡Entendido! ♡
-            </button>
+      {/* Modal Agregar (Simplificado) */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center">
+          <div className="bg-white w-full rounded-3xl p-6">
+            <h2 className="text-xl font-bold mb-4">Nuevo Tejido</h2>
+            <select className="w-full p-3 border rounded-xl mb-3" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input type="number" placeholder="Precio COP" className="w-full p-3 border rounded-xl mb-3" onChange={e => setNewItem({...newItem, price: e.target.value})} />
+            <input type="file" accept="image/*" onChange={handleImageUpload} className="mb-4" />
+            <button onClick={addItem} className="w-full py-3 bg-pink-600 text-white rounded-xl font-bold">Publicar ✨</button>
+            <button onClick={() => setShowAddModal(false)} className="w-full mt-2 text-gray-500">Cancelar</button>
           </div>
         </div>
       )}
 
-      {/* Login Modal */}
+      {/* Login Admin */}
       {showAdminLogin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-xs shadow-2xl text-center relative">
-            <button onClick={() => setShowAdminLogin(false)} className="absolute top-4 right-4 text-gray-300"><X size={24} /></button>
-            <h2 className="text-xl font-black mb-6">Modo Admin</h2>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <input type="password" placeholder="Pin" className="w-full p-4 bg-pink-50 rounded-2xl text-center font-bold" value={adminPass} onChange={(e) => setAdminPass(e.target.value)} autoFocus />
-              <button type="submit" className="w-full py-3 text-white rounded-2xl font-black shadow-lg" style={{ backgroundColor: COLORS.raspberryRose }}>Entrar</button>
-            </form>
-          </div>
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <form onSubmit={handleLogin} className="bg-white p-6 rounded-3xl w-full max-w-xs text-center">
+            <h2 className="font-bold mb-4">Acceso Admin</h2>
+            <input type="password" placeholder="PIN" className="w-full p-3 border rounded-xl mb-3 text-center" value={adminPass} onChange={e => setAdminPass(e.target.value)} />
+            <button className="w-full py-3 bg-pink-600 text-white rounded-xl">Entrar</button>
+          </form>
         </div>
       )}
 
       <style>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
         @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700;900&display=swap');
-        body { font-family: 'Quicksand', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
     </div>
   );
-}
+                                              }
