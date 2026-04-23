@@ -22,8 +22,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Nueva lista de categorías incluyendo "Por Unidad"
-const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Bebé", "Tapetes", "Bolsos", "Por Unidad", "Otros"];
+const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Bebé", "Tapetes", "Bolsos", "Otros"];
 const CLOTHES_SIZES = ["XS", "S", "M", "L", "XL"];
 const BABY_SIZES = ["0-3 Meses", "3-6 Meses", "6-9 Meses", "9-12 Meses", "2 Años", "3 Años"];
 const OBJECT_SIZES = ["Pequeño", "Mediano", "Grande"];
@@ -79,7 +78,9 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
 
         <p className="text-xl font-bold mb-4">
           {currentPrice ? currentPrice.toLocaleString() : '0'} COP 
-          {selectedSize && <span className="text-sm text-pink-400 ml-1">({selectedSize})</span>}
+          <span className="text-sm text-pink-400 ml-1">
+            {item.isPerUnit ? 'c/u' : ''} {selectedSize ? `(${selectedSize})` : ''}
+          </span>
         </p>
 
         {!isLocked && (
@@ -111,10 +112,12 @@ export default function SakuraApp() {
   const [showInfo, setShowInfo] = useState(false);
   const [filter, setFilter] = useState('Todos');
   const [loading, setLoading] = useState(true);
+  
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [sizeType, setSizeType] = useState('none');
-  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {} });
+  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {}, isPerUnit: false });
+
   const [lockedItem, setLockedItem] = useState(null);
   const [lockedSize, setLockedSize] = useState(null);
 
@@ -145,15 +148,9 @@ export default function SakuraApp() {
     });
   }, [user]);
 
-  // Lógica de filtrado con reconocimiento de "Otros"
-  const filteredItems = useMemo(() => {
-    if (filter === 'Todos') return items;
-    return items.filter(i => {
-      // Si la categoría del item no existe en nuestra lista oficial, se considera "Otros"
-      if (filter === 'Otros' && !CATEGORIES.includes(i.category)) return true;
-      return i.category === filter;
-    });
-  }, [items, filter]);
+  const filteredItems = useMemo(() => 
+    filter === 'Todos' ? items : items.filter(i => i.category === filter)
+  , [items, filter]);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -195,7 +192,13 @@ export default function SakuraApp() {
   };
 
   const openEdit = (item) => {
-    setNewItem({ price: item.price || '', category: item.category, image: item.image, sizes: item.sizes || {} });
+    setNewItem({ 
+        price: item.price || '', 
+        category: item.category, 
+        image: item.image, 
+        sizes: item.sizes || {},
+        isPerUnit: item.isPerUnit || false 
+    });
     if (item.sizes && Object.keys(item.sizes).length > 0) {
       const keys = Object.keys(item.sizes);
       if (keys.some(k => BABY_SIZES.includes(k))) setSizeType('baby');
@@ -213,7 +216,7 @@ export default function SakuraApp() {
     setShowAddModal(false);
     setIsEditing(false);
     setSizeType('none');
-    setNewItem({ price: '', category: 'Blusas', image: '', sizes: {} });
+    setNewItem({ price: '', category: 'Blusas', image: '', sizes: {}, isPerUnit: false });
   };
 
   const sendWhatsApp = (item, selectedSize, currentPrice) => {
@@ -221,15 +224,17 @@ export default function SakuraApp() {
     const baseUrl = window.location.origin + window.location.pathname;
     const productLink = `${baseUrl}?id=${item.id}${selectedSize ? `&size=${encodeURIComponent(selectedSize)}` : ''}`;
     const tallaInfo = selectedSize ? `\n*Talla/Tamaño:* ${selectedSize}` : '';
+    const unitInfo = item.isPerUnit ? ' (por unidad)' : '';
     const precioFinal = currentPrice ? currentPrice.toLocaleString() : '0';
     
-    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${tallaInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
+    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${unitInfo}${tallaInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: COLORS.softCream, color: COLORS.text, fontFamily: "'Quicksand', sans-serif" }}>
       
+      {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b-4 border-white p-5 flex justify-between items-center rounded-b-[2.5rem] shadow-sm">
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
@@ -257,7 +262,7 @@ export default function SakuraApp() {
         <div className="flex overflow-x-auto p-4 gap-3 no-scrollbar">
           {['Todos', ...CATEGORIES].map(cat => (
             <button key={cat} onClick={() => setFilter(cat)}
-              className={`px-6 py-2 rounded-full font-bold transition-all shadow-sm border-2 border-white flex-shrink-0
+              className={`px-6 py-2 rounded-full font-bold transition-all shadow-sm border-2 border-white
                 ${filter === cat ? 'bg-pink-500 text-white' : 'bg-white text-pink-300'}`}
             >
               {cat}
@@ -276,13 +281,9 @@ export default function SakuraApp() {
               <ProductCard item={lockedItem} isAdmin={false} isLocked={true} preselectedSize={lockedSize} sendWhatsApp={sendWhatsApp} />
               <button onClick={() => window.location.href = window.location.pathname} className="w-full mt-6 text-pink-400 font-bold py-2">Ver todo el catálogo</button>
             </div>
-          ) : filteredItems.length > 0 ? (
-            filteredItems.map(item => (
-              <ProductCard key={item.id} item={item} isAdmin={isAdmin} openEdit={openEdit} sendWhatsApp={sendWhatsApp} />
-            ))
-          ) : (
-            <div className="col-span-full text-center py-20 text-pink-200 font-bold">No hay diseños en esta categoría aún ✨</div>
-          )}
+          ) : filteredItems.map(item => (
+            <ProductCard key={item.id} item={item} isAdmin={isAdmin} openEdit={openEdit} sendWhatsApp={sendWhatsApp} />
+          ))}
         </div>
       </main>
 
@@ -338,6 +339,17 @@ export default function SakuraApp() {
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
 
+              {/* Ajuste: Switch para "Cada Unidad" */}
+              <div className="flex items-center justify-between bg-pink-50 p-4 rounded-2xl border border-pink-100">
+                <span className="font-bold text-pink-600 text-sm">¿Precio por unidad (c/u)?</span>
+                <button 
+                  onClick={() => setNewItem({...newItem, isPerUnit: !newItem.isPerUnit})}
+                  className={`w-12 h-6 rounded-full transition-colors relative ${newItem.isPerUnit ? 'bg-pink-500' : 'bg-gray-300'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${newItem.isPerUnit ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+
               <div className="bg-pink-50 p-4 rounded-2xl space-y-2">
                 <p className="text-xs font-bold text-pink-600 mb-2">Tipo de Precio:</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -349,7 +361,7 @@ export default function SakuraApp() {
               </div>
 
               {sizeType === 'none' ? (
-                <input type="number" placeholder="Precio Único COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
+                <input type="number" placeholder="Precio COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   {(sizeType === 'clothes' ? CLOTHES_SIZES : sizeType === 'baby' ? BABY_SIZES : OBJECT_SIZES).map(size => (
