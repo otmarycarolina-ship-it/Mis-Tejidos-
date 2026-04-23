@@ -328,7 +328,7 @@ export default function SakuraApp() {
       {showAddModal && (
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md p-4 flex items-center justify-center overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl my-auto">
-            <h2 className="text-2xl font-bold mb-6 text-center">{isEditing ? 'Editar Diseño' : 'Nueva Creación'}</h2>
+            <h2 className="text-2xl font-bold mb-6 text-center" style={{ color: COLORS.deepRose }}>{isEditing ? 'Editar Diseño' : 'Nueva Creación'}</h2>
             
             <div className="space-y-4">
               <label className="block w-full h-40 bg-pink-50 rounded-3xl border-4 border-dashed border-pink-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative">
@@ -336,66 +336,85 @@ export default function SakuraApp() {
                 <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
               </label>
 
-              <select className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
+              <select className="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold text-gray-500" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
 
-              <div className="flex items-center justify-between bg-pink-50 p-4 rounded-2xl border border-pink-100">
+              {/* Botón Switch de Precio por Unidad (COMO EN TU IMAGEN) */}
+              <div className="bg-pink-50/50 p-4 rounded-2xl border border-pink-100 flex items-center justify-between">
                 <span className="font-bold text-pink-600 text-sm">¿Precio por unidad (c/u)?</span>
                 <button 
                   onClick={() => setNewItem({...newItem, isPerUnit: !newItem.isPerUnit})}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${newItem.isPerUnit ? 'bg-pink-500' : 'bg-gray-300'}`}
+                  className={`w-14 h-7 rounded-full transition-all relative ${newItem.isPerUnit ? 'bg-pink-500' : 'bg-gray-300'}`}
                 >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${newItem.isPerUnit ? 'left-7' : 'left-1'}`} />
+                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all shadow-sm ${newItem.isPerUnit ? 'left-8' : 'left-1'}`} />
                 </button>
               </div>
 
-              <div className="bg-pink-50 p-4 rounded-2xl space-y-2">
-                <p className="text-xs font-bold text-pink-600 mb-2">Tipo de Precio:</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => setSizeType('none')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'none' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Único</button>
-                  <button onClick={() => setSizeType('clothes')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'clothes' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Ropa</button>
-                  <button onClick={() => setSizeType('baby')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'baby' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Bebé</button>
-                  <button onClick={() => setSizeType('objects')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'objects' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Tamaños</button>
+              {/* Selector de Escala de Tallas (ESTILO CUADRÍCULA DE TUS IMÁGENES) */}
+              <div className="bg-pink-50/30 p-5 rounded-[2rem] border border-pink-100">
+                <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest mb-4">Escala de tallas:</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: 'none', label: 'Único' },
+                    { id: 'clothes', label: 'Ropa' },
+                    { id: 'baby', label: 'Bebé' },
+                    { id: 'objects', label: 'Accesorios' }
+                  ].map(type => (
+                    <button 
+                      key={type.id}
+                      onClick={() => setSizeType(type.id)}
+                      className={`py-4 px-2 rounded-xl font-bold transition-all border-2 text-sm
+                        ${sizeType === type.id 
+                          ? 'bg-pink-500 border-pink-500 text-white shadow-md' 
+                          : 'bg-white border-white text-pink-200'}`}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {sizeType === 'none' ? (
-                <input type="number" placeholder="Precio COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
-              ) : (
-                <div className="space-y-3">
-                  {(sizeType === 'clothes' ? CLOTHES_SIZES : sizeType === 'baby' ? BABY_SIZES : OBJECT_SIZES).map(size => (
-                    <div key={size} className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <span className="text-[10px] font-bold ml-2 text-pink-400 uppercase">{size}</span>
-                        <input 
-                          type="number" 
-                          placeholder="Precio" 
-                          className="w-full p-3 bg-gray-50 rounded-xl text-sm" 
-                          value={newItem.sizes[size]?.price || newItem.sizes[size] || ''} 
-                          onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: { ...(newItem.sizes[size] || {}), price: parseFloat(e.target.value) } }})} 
-                        />
-                      </div>
-                      {sizeType === 'objects' && (
-                        <div className="flex-1">
+              {/* Inputs de Precios Dinámicos */}
+              <div className="space-y-3">
+                {sizeType === 'none' ? (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold ml-2 text-pink-400 uppercase">Precio único</p>
+                    <input type="number" placeholder="0" className="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {(sizeType === 'clothes' ? CLOTHES_SIZES : sizeType === 'baby' ? BABY_SIZES : OBJECT_SIZES).map(size => (
+                      <div key={size} className="space-y-1">
+                        <p className="text-[10px] font-bold ml-2 text-pink-400 uppercase">{size}</p>
+                        <div className="flex flex-col gap-1">
                           <input 
-                            type="text" 
-                            placeholder="Ej: 20 cm" 
-                            className="w-full p-3 bg-gray-50 rounded-xl text-sm" 
-                            value={newItem.sizes[size]?.cm || ''} 
-                            onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: { ...(newItem.sizes[size] || {}), cm: e.target.value } }})} 
+                            type="number" 
+                            placeholder="0" 
+                            className="w-full p-3 bg-gray-50 rounded-xl text-sm font-bold" 
+                            value={newItem.sizes[size]?.price || newItem.sizes[size] || ''} 
+                            onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: { ...(newItem.sizes[size] || {}), price: parseFloat(e.target.value) } }})} 
                           />
+                          {sizeType === 'objects' && (
+                            <input 
+                              type="text" 
+                              placeholder="cm" 
+                              className="w-full p-2 bg-pink-50/50 rounded-lg text-[10px] font-bold text-pink-400" 
+                              value={newItem.sizes[size]?.cm || ''} 
+                              onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: { ...(newItem.sizes[size] || {}), cm: e.target.value } }})} 
+                            />
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-              <button onClick={saveItem} className="w-full py-4 bg-pink-600 text-white rounded-2xl font-bold shadow-xl">
-                {isEditing ? 'Guardar Cambios' : 'Publicar'}
+              <button onClick={saveItem} className="w-full py-5 bg-pink-600 text-white rounded-[1.5rem] font-bold shadow-xl shadow-pink-100 mt-4 active:scale-95 transition-transform">
+                {isEditing ? 'Guardar Cambios' : 'Publicar Diseño'}
               </button>
-              <button onClick={closeModal} className="w-full text-gray-400 font-bold py-2">Cancelar</button>
+              <button onClick={closeModal} className="w-full text-gray-400 font-bold py-2 text-sm">Cancelar</button>
             </div>
           </div>
         </div>
@@ -405,7 +424,7 @@ export default function SakuraApp() {
         <div className="fixed inset-0 z-[60] bg-pink-50/90 backdrop-blur-sm flex items-center justify-center p-4">
           <form onSubmit={handleLogin} className="bg-white p-8 rounded-[2.5rem] w-full max-w-xs text-center shadow-xl border border-pink-100">
             <h2 className="text-xl font-bold mb-6">Acceso Admin</h2>
-            <input type="password" placeholder="PIN" className="w-full p-4 bg-gray-50 rounded-2xl text-center mb-4 focus:ring-2 focus:ring-pink-300 border-none" value={adminPass} onChange={e => setAdminPass(e.target.value)} />
+            <input type="password" placeholder="PIN" className="w-full p-4 bg-gray-50 rounded-2xl text-center mb-4 focus:ring-2 focus:ring-pink-300 border-none font-bold" value={adminPass} onChange={e => setAdminPass(e.target.value)} />
             <button className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold shadow-lg">Entrar</button>
             <button type="button" onClick={() => setShowAdminLogin(false)} className="mt-4 text-gray-300">Cerrar</button>
           </form>
