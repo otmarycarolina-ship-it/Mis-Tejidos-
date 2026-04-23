@@ -22,7 +22,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Bebé", "Tapetes", "Bolsos", "Otros"];
+// Nueva lista de categorías incluyendo "Por Unidad"
+const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Bebé", "Tapetes", "Bolsos", "Por Unidad", "Otros"];
 const CLOTHES_SIZES = ["XS", "S", "M", "L", "XL"];
 const BABY_SIZES = ["0-3 Meses", "3-6 Meses", "6-9 Meses", "9-12 Meses", "2 Años", "3 Años"];
 const OBJECT_SIZES = ["Pequeño", "Mediano", "Grande"];
@@ -37,16 +38,12 @@ const COLORS = {
 
 const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselectedSize }) => {
   const hasSizes = item.sizes && Object.keys(item.sizes).length > 0;
-  
-  // Orden unificado de todas las tallas para que aparezcan bien
   const sizeOrder = [...BABY_SIZES, ...CLOTHES_SIZES, ...OBJECT_SIZES];
   const sortedSizes = hasSizes 
     ? sizeOrder.filter(size => Object.keys(item.sizes).includes(size))
     : [];
 
   const [selectedSize, setSelectedSize] = useState(preselectedSize || (hasSizes ? sortedSizes[0] : null));
-  
-  // Corregido: Se asegura de obtener el precio basado en la talla seleccionada
   const currentPrice = hasSizes ? (item.sizes[selectedSize] || 0) : (item.price || 0);
 
   return (
@@ -114,12 +111,10 @@ export default function SakuraApp() {
   const [showInfo, setShowInfo] = useState(false);
   const [filter, setFilter] = useState('Todos');
   const [loading, setLoading] = useState(true);
-  
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [sizeType, setSizeType] = useState('none');
   const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {} });
-
   const [lockedItem, setLockedItem] = useState(null);
   const [lockedSize, setLockedSize] = useState(null);
 
@@ -150,9 +145,15 @@ export default function SakuraApp() {
     });
   }, [user]);
 
-  const filteredItems = useMemo(() => 
-    filter === 'Todos' ? items : items.filter(i => i.category === filter)
-  , [items, filter]);
+  // Lógica de filtrado con reconocimiento de "Otros"
+  const filteredItems = useMemo(() => {
+    if (filter === 'Todos') return items;
+    return items.filter(i => {
+      // Si la categoría del item no existe en nuestra lista oficial, se considera "Otros"
+      if (filter === 'Otros' && !CATEGORIES.includes(i.category)) return true;
+      return i.category === filter;
+    });
+  }, [items, filter]);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -229,7 +230,6 @@ export default function SakuraApp() {
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: COLORS.softCream, color: COLORS.text, fontFamily: "'Quicksand', sans-serif" }}>
       
-      {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b-4 border-white p-5 flex justify-between items-center rounded-b-[2.5rem] shadow-sm">
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
@@ -257,7 +257,7 @@ export default function SakuraApp() {
         <div className="flex overflow-x-auto p-4 gap-3 no-scrollbar">
           {['Todos', ...CATEGORIES].map(cat => (
             <button key={cat} onClick={() => setFilter(cat)}
-              className={`px-6 py-2 rounded-full font-bold transition-all shadow-sm border-2 border-white
+              className={`px-6 py-2 rounded-full font-bold transition-all shadow-sm border-2 border-white flex-shrink-0
                 ${filter === cat ? 'bg-pink-500 text-white' : 'bg-white text-pink-300'}`}
             >
               {cat}
@@ -276,9 +276,13 @@ export default function SakuraApp() {
               <ProductCard item={lockedItem} isAdmin={false} isLocked={true} preselectedSize={lockedSize} sendWhatsApp={sendWhatsApp} />
               <button onClick={() => window.location.href = window.location.pathname} className="w-full mt-6 text-pink-400 font-bold py-2">Ver todo el catálogo</button>
             </div>
-          ) : filteredItems.map(item => (
-            <ProductCard key={item.id} item={item} isAdmin={isAdmin} openEdit={openEdit} sendWhatsApp={sendWhatsApp} />
-          ))}
+          ) : filteredItems.length > 0 ? (
+            filteredItems.map(item => (
+              <ProductCard key={item.id} item={item} isAdmin={isAdmin} openEdit={openEdit} sendWhatsApp={sendWhatsApp} />
+            ))
+          ) : (
+            <div className="col-span-full text-center py-20 text-pink-200 font-bold">No hay diseños en esta categoría aún ✨</div>
+          )}
         </div>
       </main>
 
