@@ -376,7 +376,7 @@ export default function SakuraApp() {
                       <span className="text-[10px] font-bold ml-2 text-pink-500 uppercase">{size}</span>
                       <input type="number" placeholder="Precio" className="p-3 bg-gray-50 rounded-xl text-sm" value={newItem.sizes[size] || ''} onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }})} />
                       {sizeType === 'objects' && (
-                        <input type="text" placeholder="cm" className="p-2 bg-pink-50/50 rounded-lg text-[10px] border-none" value={newItem.measurements[size] || ''} onChange={e => setNewItem({ ...newItem, measurements: { ...newItem.measurements, [size]: e.target.value }})} />
+                        <input type="tel" placeholder="cm" className="p-2 bg-pink-50/50 rounded-lg text-[10px] border-none" value={newItem.measurements[size] || ''} onChange={e => setNewItem({ ...newItem, measurements: { ...newItem.measurements, [size]: e.target.value }})} />
                       )}
                     </div>
                   ))}
