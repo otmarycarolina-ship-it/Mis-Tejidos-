@@ -44,8 +44,6 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
 
   const [selectedSize, setSelectedSize] = useState(preselectedSize || (hasSizes ? sortedSizes[0] : null));
   const currentPrice = hasSizes ? (item.sizes[selectedSize] || 0) : (item.price || 0);
-  
-  // Obtener la descripción de medida si existe para la talla seleccionada
   const currentMeasure = item.measurements ? item.measurements[selectedSize] : '';
 
   return (
@@ -79,11 +77,8 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
           </div>
         )}
 
-        {/* Mostrar medidas en cm si el usuario las agregó */}
         {currentMeasure && (
-          <p className="text-[10px] font-bold text-pink-400 mb-2 uppercase tracking-tight">
-            {currentMeasure}
-          </p>
+          <p className="text-[10px] font-bold text-pink-400 mb-2 uppercase">{currentMeasure}</p>
         )}
 
         <p className="text-xl font-bold mb-4">
@@ -188,7 +183,7 @@ export default function SakuraApp() {
       ...newItem,
       price: sizeType !== 'none' ? 0 : parseFloat(newItem.price || 0),
       sizes: sizeType !== 'none' ? newItem.sizes : {},
-      measurements: sizeType !== 'none' ? newItem.measurements : {}
+      measurements: sizeType === 'objects' ? newItem.measurements : {}
     };
 
     try {
@@ -374,25 +369,27 @@ export default function SakuraApp() {
               {sizeType === 'none' ? (
                 <input type="number" placeholder="Precio COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
               ) : (
-                <div className="grid grid-cols-1 gap-3">
+                <div className={sizeType === 'objects' ? "flex flex-col gap-2" : "grid grid-cols-2 gap-2"}>
                   {(sizeType === 'clothes' ? CLOTHES_SIZES : sizeType === 'baby' ? BABY_SIZES : OBJECT_SIZES).map(size => (
-                    <div key={size} className="bg-pink-50/50 p-3 rounded-2xl border border-pink-100">
-                      <span className="text-[11px] font-black ml-1 text-pink-500 uppercase">{size}</span>
-                      <div className="grid grid-cols-2 gap-2 mt-1">
+                    <div key={size} className="flex flex-col">
+                      <span className="text-[10px] font-bold ml-2 text-pink-400 uppercase">{size}</span>
+                      <div className="flex gap-2">
                         <input 
                           type="number" 
                           placeholder="Precio" 
-                          className="p-3 bg-white rounded-xl text-sm border-none shadow-inner" 
+                          className="flex-1 p-3 bg-gray-50 rounded-xl text-sm" 
                           value={newItem.sizes[size] || ''} 
                           onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }})} 
                         />
-                        <input 
-                          type="text" 
-                          placeholder="Ej: 20 cm" 
-                          className="p-3 bg-white rounded-xl text-sm border-none shadow-inner" 
-                          value={newItem.measurements[size] || ''} 
-                          onChange={e => setNewItem({ ...newItem, measurements: { ...newItem.measurements, [size]: e.target.value }})} 
-                        />
+                        {sizeType === 'objects' && (
+                          <input 
+                            type="text" 
+                            placeholder="Ej: 20 cm" 
+                            className="w-24 p-3 bg-gray-50 rounded-xl text-xs italic" 
+                            value={newItem.measurements[size] || ''} 
+                            onChange={e => setNewItem({ ...newItem, measurements: { ...newItem.measurements, [size]: e.target.value }})} 
+                          />
+                        )}
                       </div>
                     </div>
                   ))}
