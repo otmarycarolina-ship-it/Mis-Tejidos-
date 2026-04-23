@@ -8,7 +8,6 @@ import {
   Plus, Trash2, Info, Lock, Unlock, MessageCircle, Heart, Sparkles, X, Camera, Pencil, Wallet, Clock, AlertCircle
 } from 'lucide-react';
 
-// Configuración de Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyC46KE_P0F7Vs382fpm1zyl3oUjxRPK9oI",
   authDomain: "mis-tejidos.firebaseapp.com",
@@ -24,7 +23,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Vestidos de Bebé", "Tapetes", "Bolsos", "Otros"];
-const SIZES = ["XS", "S", "M", "L", "XL"];
+const CLOTHES_SIZES = ["XS", "S", "M", "L", "XL"];
+const OBJECT_SIZES = ["Pequeño", "Mediano", "Grande"];
 
 const COLORS = {
   sakuraPink: '#F283AF',
@@ -34,22 +34,18 @@ const COLORS = {
   text: '#5D4037'
 };
 
-// Componente para cada Tarjeta de Producto para manejar su propia talla seleccionada
-const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp }) => {
+const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselectedSize }) => {
   const hasSizes = item.sizes && Object.keys(item.sizes).length > 0;
-  const [selectedSize, setSelectedSize] = useState(hasSizes ? Object.keys(item.sizes)[0] : null);
+  // Si viene bloqueado por URL, usa la talla de la URL, si no, la primera disponible
+  const [selectedSize, setSelectedSize] = useState(preselectedSize || (hasSizes ? Object.keys(item.sizes)[0] : null));
 
   const currentPrice = hasSizes ? item.sizes[selectedSize] : item.price;
 
   return (
     <div className="bg-white rounded-[3rem] p-4 shadow-xl transition-all">
       <div className="relative aspect-square rounded-[2.2rem] overflow-hidden bg-[#FAF7F2] mb-4 border border-pink-50">
-        <img 
-          src={item.image} 
-          className="w-full h-full object-contain p-2" 
-          alt={item.category}
-        />
-        {isAdmin && (
+        <img src={item.image} className="w-full h-full object-contain p-2" alt={item.category} />
+        {isAdmin && !isLocked && (
           <div className="absolute top-4 right-4 flex flex-col gap-2">
             <button onClick={() => openEdit(item)} className="bg-white/90 p-3 rounded-2xl text-blue-500 shadow-lg"><Pencil size={20} /></button>
             <button onClick={() => deleteDoc(doc(db, 'products', item.id))} className="bg-white/90 p-3 rounded-2xl text-red-500 shadow-lg"><Trash2 size={20} /></button>
@@ -59,15 +55,16 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp }) => {
       <div className="px-2 text-center">
         <h3 className="text-2xl font-black mb-1" style={{ color: COLORS.deepRose }}>{item.category}</h3>
         
-        {/* Selector de Tallas si es ropa */}
         {hasSizes && (
           <div className="flex flex-wrap justify-center gap-2 mb-3">
             {Object.keys(item.sizes).map(size => (
               <button
                 key={size}
+                disabled={isLocked} // Bloquear cambio si viene de un link de pedido
                 onClick={() => setSelectedSize(size)}
                 className={`px-3 py-1 rounded-lg text-xs font-bold border-2 transition-all
-                  ${selectedSize === size ? 'bg-pink-500 border-pink-500 text-white' : 'bg-white border-pink-100 text-pink-300'}`}
+                  ${selectedSize === size ? 'bg-pink-500 border-pink-500 text-white' : 'bg-white border-pink-100 text-pink-300'}
+                  ${isLocked && selectedSize !== size ? 'opacity-30' : ''}`}
               >
                 {size}
               </button>
@@ -80,12 +77,20 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp }) => {
           {selectedSize && <span className="text-sm text-pink-400 ml-1">({selectedSize})</span>}
         </p>
 
-        <button onClick={() => sendWhatsApp(item, selectedSize, currentPrice)}
-          className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 shadow-pink-200"
-          style={{ backgroundColor: COLORS.sakuraPink }}
-        >
-          <MessageCircle size={20} fill="white" /> Pedir por WhatsApp
-        </button>
+        {!isLocked && (
+          <button onClick={() => sendWhatsApp(item, selectedSize, currentPrice)}
+            className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 shadow-pink-200"
+            style={{ backgroundColor: COLORS.sakuraPink }}
+          >
+            <MessageCircle size={20} fill="white" /> Pedir por WhatsApp
+          </button>
+        )}
+        
+        {isLocked && (
+          <div className="py-2 px-4 bg-pink-50 rounded-xl text-pink-600 font-bold text-sm">
+            ✨ Opción seleccionada para el pedido
+          </div>
+        )}
       </div>
     </div>
   );
@@ -104,17 +109,21 @@ export default function SakuraApp() {
   
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [useSizes, setUseSizes] = useState(false);
+  const [sizeType, setSizeType] = useState('none'); // 'none', 'clothes', 'objects'
   const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {} });
+
+  const [lockedItem, setLockedItem] = useState(null);
+  const [lockedSize, setLockedSize] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const productId = params.get('id');
+    const productSize = params.get('size');
     if (productId && items.length > 0) {
       const specificItem = items.find(i => i.id === productId);
       if (specificItem) {
-        setItems([specificItem]);
-        setFilter(specificItem.category);
+        setLockedItem(specificItem);
+        setLockedSize(productSize);
       }
     }
   }, [items]);
@@ -159,11 +168,10 @@ export default function SakuraApp() {
     e.preventDefault();
     if (!newItem.image) return alert("Sube una imagen");
     
-    // Validar precios
     const finalData = {
       ...newItem,
-      price: useSizes ? 0 : parseFloat(newItem.price || 0),
-      sizes: useSizes ? newItem.sizes : {}
+      price: sizeType !== 'none' ? 0 : parseFloat(newItem.price || 0),
+      sizes: sizeType !== 'none' ? newItem.sizes : {}
     };
 
     try {
@@ -171,24 +179,19 @@ export default function SakuraApp() {
         await updateDoc(doc(db, 'products', editId), finalData);
       } else {
         const id = Date.now().toString();
-        await setDoc(doc(db, 'products', id), { 
-          ...finalData, 
-          id, 
-          createdAt: new Date().toISOString() 
-        });
+        await setDoc(doc(db, 'products', id), { ...finalData, id, createdAt: new Date().toISOString() });
       }
       closeModal();
     } catch (err) { console.error(err); }
   };
 
   const openEdit = (item) => {
-    setNewItem({ 
-      price: item.price || '', 
-      category: item.category, 
-      image: item.image, 
-      sizes: item.sizes || {} 
-    });
-    setUseSizes(item.sizes && Object.keys(item.sizes).length > 0);
+    setNewItem({ price: item.price || '', category: item.category, image: item.image, sizes: item.sizes || {} });
+    if (item.sizes && Object.keys(item.sizes).length > 0) {
+      setSizeType(Object.keys(item.sizes).includes('XS') ? 'clothes' : 'objects');
+    } else {
+      setSizeType('none');
+    }
     setEditId(item.id);
     setIsEditing(true);
     setShowAddModal(true);
@@ -197,16 +200,16 @@ export default function SakuraApp() {
   const closeModal = () => {
     setShowAddModal(false);
     setIsEditing(false);
-    setEditId(null);
-    setUseSizes(false);
+    setSizeType('none');
     setNewItem({ price: '', category: 'Blusas', image: '', sizes: {} });
   };
 
   const sendWhatsApp = (item, selectedSize, currentPrice) => {
     const phoneNumber = "584226388324";
     const baseUrl = window.location.origin + window.location.pathname;
-    const productLink = `${baseUrl}?id=${item.id}`;
-    const tallaInfo = selectedSize ? `\n*Talla:* ${selectedSize}` : '';
+    // Agregamos la talla al enlace para que al abrirlo quede bloqueada
+    const productLink = `${baseUrl}?id=${item.id}${selectedSize ? `&size=${selectedSize}` : ''}`;
+    const tallaInfo = selectedSize ? `\n*Talla/Tamaño:* ${selectedSize}` : '';
     
     const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${tallaInfo}\n*Precio:* ${currentPrice.toLocaleString()} COP\n\nLink del pedido:\n${productLink}`;
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
@@ -222,55 +225,62 @@ export default function SakuraApp() {
             <Heart size={22} fill={COLORS.sakuraPink} color={COLORS.sakuraPink} />
             <h1 className="text-xl font-black" style={{ color: COLORS.deepRose }}>Mis Tejidos</h1>
           </div>
-          <span className="text-[10px] uppercase tracking-[0.2em] font-bold ml-7 text-pink-400">Hecho a mano</span>
+          <span className="text-[10px] uppercase tracking-[0.2em] font-bold ml-7 text-pink-400">Hecho con amor</span>
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => setShowInfo(true)} className="p-2 bg-pink-100 rounded-xl text-pink-500">
-            <Info size={22} />
+        {!lockedItem && (
+          <div className="flex gap-3">
+            <button onClick={() => setShowInfo(true)} className="p-2 bg-pink-100 rounded-xl text-pink-500"><Info size={22} /></button>
+            <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className="p-2 bg-pink-100 rounded-xl text-pink-500">
+              {isAdmin ? <Unlock size={22} /> : <Lock size={22} />}
+            </button>
+          </div>
+        )}
+        {lockedItem && (
+          <button onClick={() => window.location.href = window.location.pathname} className="p-2 bg-pink-500 rounded-xl text-white">
+            <X size={22} />
           </button>
-          <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className="p-2 bg-pink-100 rounded-xl text-pink-500">
-            {isAdmin ? <Unlock size={22} /> : <Lock size={22} />}
-          </button>
-        </div>
+        )}
       </header>
 
-      {/* Categorías */}
-      <div className="flex overflow-x-auto p-4 gap-3 no-scrollbar">
-        {['Todos', ...CATEGORIES].map(cat => (
-          <button key={cat} onClick={() => setFilter(cat)}
-            className={`px-6 py-2 rounded-full font-bold transition-all shadow-sm border-2 border-white
-              ${filter === cat ? 'bg-pink-500 text-white' : 'bg-white text-pink-300'}`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
+      {/* Categorías (Ocultas si es link directo) */}
+      {!lockedItem && (
+        <div className="flex overflow-x-auto p-4 gap-3 no-scrollbar">
+          {['Todos', ...CATEGORIES].map(cat => (
+            <button key={cat} onClick={() => setFilter(cat)}
+              className={`px-6 py-2 rounded-full font-bold transition-all shadow-sm border-2 border-white
+                ${filter === cat ? 'bg-pink-500 text-white' : 'bg-white text-pink-300'}`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Grid de Productos */}
-      <main className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-8">
-        {loading ? (
-          <div className="col-span-full text-center py-20 text-pink-300">Cargando tus tejidos...</div>
-        ) : filteredItems.map(item => (
-          <ProductCard 
-            key={item.id} 
-            item={item} 
-            isAdmin={isAdmin} 
-            openEdit={openEdit} 
-            sendWhatsApp={sendWhatsApp}
-          />
-        ))}
+      <main className="p-4 flex justify-center">
+        <div className="w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-8">
+          {loading ? (
+            <div className="col-span-full text-center py-20 text-pink-300">Cargando tus tejidos...</div>
+          ) : lockedItem ? (
+            <div className="col-span-full max-w-md mx-auto w-full">
+              <h2 className="text-center font-bold text-pink-400 mb-4 uppercase tracking-widest text-sm">Resumen de tu pedido</h2>
+              <ProductCard item={lockedItem} isAdmin={false} isLocked={true} preselectedSize={lockedSize} />
+              <button onClick={() => window.location.href = window.location.pathname} className="w-full mt-6 text-pink-400 font-bold py-2">Ver todo el catálogo</button>
+            </div>
+          ) : filteredItems.map(item => (
+            <ProductCard key={item.id} item={item} isAdmin={isAdmin} openEdit={openEdit} sendWhatsApp={sendWhatsApp} />
+          ))}
+        </div>
       </main>
 
       {/* Botón Flotante Admin */}
-      {isAdmin && (
-        <button onClick={() => setShowAddModal(true)}
-          className="fixed bottom-8 right-8 w-16 h-16 bg-pink-600 text-white rounded-full shadow-2xl flex items-center justify-center z-50 border-4 border-white"
-        >
+      {isAdmin && !lockedItem && (
+        <button onClick={() => setShowAddModal(true)} className="fixed bottom-8 right-8 w-16 h-16 bg-pink-600 text-white rounded-full shadow-2xl flex items-center justify-center z-50 border-4 border-white">
           <Plus size={32} />
         </button>
       )}
 
-      {/* Modal: Info e Instrucciones */}
+      {/* Modal: ¿Cómo encargar? (Versión Original) */}
       {showInfo && (
         <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-6 flex items-center justify-center">
           <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl border-4 border-white">
@@ -281,19 +291,23 @@ export default function SakuraApp() {
             <div className="p-8 space-y-6 text-center">
               <div className="space-y-2">
                 <Wallet className="mx-auto text-pink-400" size={24}/>
-                <p className="text-[15px] leading-relaxed">Todos los pedidos se realizan con un <b>anticipo del 50%</b>.</p>
+                <p className="text-[15px] leading-relaxed">Todos los pedidos se realizan con un <b>anticipo del 50%</b> para asegurar tu lugar en la agenda.</p>
+              </div>
+              <div className="space-y-2">
+                <AlertCircle className="mx-auto text-red-300" size={24}/>
+                <p className="text-[15px] leading-relaxed">En caso de cancelación de algún pedido <b>no se devolverá el anticipo</b>.</p>
               </div>
               <div className="space-y-2">
                 <Clock className="mx-auto text-amber-300" size={24}/>
-                <p className="text-[15px] leading-relaxed">El <b>tiempo de entrega varía</b> según el diseño y las tallas.</p>
+                <p className="text-[15px] leading-relaxed">Como son piezas hechas a mano, el <b>tiempo de entrega varía</b> según el diseño.</p>
               </div>
-              <button onClick={() => setShowInfo(false)} className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold mt-4">¡Entendido! ♡</button>
+              <button onClick={() => setShowInfo(false)} className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold mt-4 shadow-lg shadow-pink-100">¡Entendido! ♡</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal: Agregar/Editar con Tallas */}
+      {/* Modal: Agregar/Editar */}
       {showAddModal && (
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md p-4 flex items-center justify-center overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl my-auto">
@@ -309,32 +323,26 @@ export default function SakuraApp() {
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
 
-              {/* Toggle de Tallas */}
-              <div className="flex items-center gap-3 p-2">
-                <input type="checkbox" id="useSizes" checked={useSizes} onChange={e => setUseSizes(e.target.checked)} className="accent-pink-500" />
-                <label htmlFor="useSizes" className="text-sm font-bold text-pink-600">Este producto tiene tallas (XS a XL)</label>
+              <div className="bg-pink-50 p-4 rounded-2xl space-y-2">
+                <p className="text-xs font-bold text-pink-600 mb-2">Tipo de Precio:</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => setSizeType('none')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'none' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Único</button>
+                  <button onClick={() => setSizeType('clothes')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'clothes' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Ropa</button>
+                  <button onClick={() => setSizeType('objects')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'objects' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Tamaños</button>
+                </div>
               </div>
 
-              {useSizes ? (
+              {sizeType === 'none' ? (
+                <input type="number" placeholder="Precio Único COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
+              ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  {SIZES.map(size => (
+                  {(sizeType === 'clothes' ? CLOTHES_SIZES : OBJECT_SIZES).map(size => (
                     <div key={size} className="flex flex-col">
-                      <span className="text-[10px] font-bold ml-2 text-pink-400">Precio {size}</span>
-                      <input 
-                        type="number" 
-                        placeholder={`Precio ${size}`} 
-                        className="p-3 bg-gray-50 rounded-xl text-sm"
-                        value={newItem.sizes[size] || ''}
-                        onChange={e => setNewItem({
-                          ...newItem, 
-                          sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }
-                        })}
-                      />
+                      <span className="text-[10px] font-bold ml-2 text-pink-400">{size}</span>
+                      <input type="number" placeholder="Precio" className="p-3 bg-gray-50 rounded-xl text-sm" value={newItem.sizes[size] || ''} onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }})} />
                     </div>
                   ))}
                 </div>
-              ) : (
-                <input type="number" placeholder="Precio Único COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
               )}
 
               <button onClick={saveItem} className="w-full py-4 bg-pink-600 text-white rounded-2xl font-bold shadow-xl">
