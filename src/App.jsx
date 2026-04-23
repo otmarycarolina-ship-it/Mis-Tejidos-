@@ -24,6 +24,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Vestidos de Bebé", "Tapetes", "Bolsos", "Otros"];
+const SIZES = ["XS", "S", "M", "L", "XL"];
 
 const COLORS = {
   sakuraPink: '#F283AF',
@@ -31,6 +32,63 @@ const COLORS = {
   deepRose: '#C43670',
   blush: '#FBD9E5',
   text: '#5D4037'
+};
+
+// Componente para cada Tarjeta de Producto para manejar su propia talla seleccionada
+const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp }) => {
+  const hasSizes = item.sizes && Object.keys(item.sizes).length > 0;
+  const [selectedSize, setSelectedSize] = useState(hasSizes ? Object.keys(item.sizes)[0] : null);
+
+  const currentPrice = hasSizes ? item.sizes[selectedSize] : item.price;
+
+  return (
+    <div className="bg-white rounded-[3rem] p-4 shadow-xl transition-all">
+      <div className="relative aspect-square rounded-[2.2rem] overflow-hidden bg-[#FAF7F2] mb-4 border border-pink-50">
+        <img 
+          src={item.image} 
+          className="w-full h-full object-contain p-2" 
+          alt={item.category}
+        />
+        {isAdmin && (
+          <div className="absolute top-4 right-4 flex flex-col gap-2">
+            <button onClick={() => openEdit(item)} className="bg-white/90 p-3 rounded-2xl text-blue-500 shadow-lg"><Pencil size={20} /></button>
+            <button onClick={() => deleteDoc(doc(db, 'products', item.id))} className="bg-white/90 p-3 rounded-2xl text-red-500 shadow-lg"><Trash2 size={20} /></button>
+          </div>
+        )}
+      </div>
+      <div className="px-2 text-center">
+        <h3 className="text-2xl font-black mb-1" style={{ color: COLORS.deepRose }}>{item.category}</h3>
+        
+        {/* Selector de Tallas si es ropa */}
+        {hasSizes && (
+          <div className="flex flex-wrap justify-center gap-2 mb-3">
+            {Object.keys(item.sizes).map(size => (
+              <button
+                key={size}
+                onClick={() => setSelectedSize(size)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold border-2 transition-all
+                  ${selectedSize === size ? 'bg-pink-500 border-pink-500 text-white' : 'bg-white border-pink-100 text-pink-300'}`}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <p className="text-xl font-bold mb-4">
+          {currentPrice ? currentPrice.toLocaleString() : '0'} COP 
+          {selectedSize && <span className="text-sm text-pink-400 ml-1">({selectedSize})</span>}
+        </p>
+
+        <button onClick={() => sendWhatsApp(item, selectedSize, currentPrice)}
+          className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 shadow-pink-200"
+          style={{ backgroundColor: COLORS.sakuraPink }}
+        >
+          <MessageCircle size={20} fill="white" /> Pedir por WhatsApp
+        </button>
+      </div>
+    </div>
+  );
 };
 
 export default function SakuraApp() {
@@ -46,16 +104,15 @@ export default function SakuraApp() {
   
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '' });
+  const [useSizes, setUseSizes] = useState(false);
+  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {} });
 
-  // Detectar si venimos de un enlace de WhatsApp para un producto específico
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const productId = params.get('id');
     if (productId && items.length > 0) {
       const specificItem = items.find(i => i.id === productId);
       if (specificItem) {
-        // Si quieres que solo se vea ese producto al abrir el link:
         setItems([specificItem]);
         setFilter(specificItem.category);
       }
@@ -100,20 +157,23 @@ export default function SakuraApp() {
 
   const saveItem = async (e) => {
     e.preventDefault();
-    if (!newItem.image || !newItem.price) return alert("Completa los datos");
+    if (!newItem.image) return alert("Sube una imagen");
+    
+    // Validar precios
+    const finalData = {
+      ...newItem,
+      price: useSizes ? 0 : parseFloat(newItem.price || 0),
+      sizes: useSizes ? newItem.sizes : {}
+    };
+
     try {
       if (isEditing) {
-        await updateDoc(doc(db, 'products', editId), {
-          price: parseFloat(newItem.price),
-          category: newItem.category,
-          image: newItem.image
-        });
+        await updateDoc(doc(db, 'products', editId), finalData);
       } else {
         const id = Date.now().toString();
         await setDoc(doc(db, 'products', id), { 
-          ...newItem, 
+          ...finalData, 
           id, 
-          price: parseFloat(newItem.price), 
           createdAt: new Date().toISOString() 
         });
       }
@@ -122,7 +182,13 @@ export default function SakuraApp() {
   };
 
   const openEdit = (item) => {
-    setNewItem({ price: item.price, category: item.category, image: item.image });
+    setNewItem({ 
+      price: item.price || '', 
+      category: item.category, 
+      image: item.image, 
+      sizes: item.sizes || {} 
+    });
+    setUseSizes(item.sizes && Object.keys(item.sizes).length > 0);
     setEditId(item.id);
     setIsEditing(true);
     setShowAddModal(true);
@@ -132,15 +198,17 @@ export default function SakuraApp() {
     setShowAddModal(false);
     setIsEditing(false);
     setEditId(null);
-    setNewItem({ price: '', category: 'Blusas', image: '' });
+    setUseSizes(false);
+    setNewItem({ price: '', category: 'Blusas', image: '', sizes: {} });
   };
 
-  const sendWhatsApp = (item) => {
+  const sendWhatsApp = (item, selectedSize, currentPrice) => {
     const phoneNumber = "584226388324";
-    // El enlace ahora lleva el ID único del producto
     const baseUrl = window.location.origin + window.location.pathname;
     const productLink = `${baseUrl}?id=${item.id}`;
-    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}\n*Precio:* ${item.price.toLocaleString()} COP\n\nLink del pedido:\n${productLink}`;
+    const tallaInfo = selectedSize ? `\n*Talla:* ${selectedSize}` : '';
+    
+    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${tallaInfo}\n*Precio:* ${currentPrice.toLocaleString()} COP\n\nLink del pedido:\n${productLink}`;
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -183,31 +251,13 @@ export default function SakuraApp() {
         {loading ? (
           <div className="col-span-full text-center py-20 text-pink-300">Cargando tus tejidos...</div>
         ) : filteredItems.map(item => (
-          <div key={item.id} className="bg-white rounded-[3rem] p-4 shadow-xl transition-all">
-            <div className="relative aspect-square rounded-[2.2rem] overflow-hidden bg-[#FAF7F2] mb-4 border border-pink-50">
-              <img 
-                src={item.image} 
-                className="w-full h-full object-contain p-2" // Object-contain para ver la pieza completa
-                alt={item.category}
-              />
-              {isAdmin && (
-                <div className="absolute top-4 right-4 flex flex-col gap-2">
-                  <button onClick={() => openEdit(item)} className="bg-white/90 p-3 rounded-2xl text-blue-500 shadow-lg"><Pencil size={20} /></button>
-                  <button onClick={() => deleteDoc(doc(db, 'products', item.id))} className="bg-white/90 p-3 rounded-2xl text-red-500 shadow-lg"><Trash2 size={20} /></button>
-                </div>
-              )}
-            </div>
-            <div className="px-2 text-center">
-              <h3 className="text-2xl font-black mb-1" style={{ color: COLORS.deepRose }}>{item.category}</h3>
-              <p className="text-xl font-bold mb-4">{item.price.toLocaleString()} COP</p>
-              <button onClick={() => sendWhatsApp(item)}
-                className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 shadow-pink-200"
-                style={{ backgroundColor: COLORS.sakuraPink }}
-              >
-                <MessageCircle size={20} fill="white" /> Pedir por WhatsApp
-              </button>
-            </div>
-          </div>
+          <ProductCard 
+            key={item.id} 
+            item={item} 
+            isAdmin={isAdmin} 
+            openEdit={openEdit} 
+            sendWhatsApp={sendWhatsApp}
+          />
         ))}
       </main>
 
@@ -220,7 +270,7 @@ export default function SakuraApp() {
         </button>
       )}
 
-      {/* Modal: ¿Cómo encargar tu pedido? */}
+      {/* Modal: Info e Instrucciones */}
       {showInfo && (
         <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-6 flex items-center justify-center">
           <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl border-4 border-white">
@@ -231,37 +281,63 @@ export default function SakuraApp() {
             <div className="p-8 space-y-6 text-center">
               <div className="space-y-2">
                 <Wallet className="mx-auto text-pink-400" size={24}/>
-                <p className="text-[15px] leading-relaxed">Todos los pedidos se realizan con un <b>anticipo del 50%</b> para asegurar tu lugar en la agenda.</p>
-              </div>
-              <div className="space-y-2">
-                <AlertCircle className="mx-auto text-red-300" size={24}/>
-                <p className="text-[15px] leading-relaxed">En caso de cancelación de algún pedido <b>no se devolverá el anticipo</b>.</p>
+                <p className="text-[15px] leading-relaxed">Todos los pedidos se realizan con un <b>anticipo del 50%</b>.</p>
               </div>
               <div className="space-y-2">
                 <Clock className="mx-auto text-amber-300" size={24}/>
-                <p className="text-[15px] leading-relaxed">Como son piezas hechas a mano, el <b>tiempo de entrega varía</b> según el diseño.</p>
+                <p className="text-[15px] leading-relaxed">El <b>tiempo de entrega varía</b> según el diseño y las tallas.</p>
               </div>
-              <button onClick={() => setShowInfo(false)} className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold mt-4 shadow-lg shadow-pink-100">¡Entendido! ♡</button>
+              <button onClick={() => setShowInfo(false)} className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold mt-4">¡Entendido! ♡</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal: Agregar/Editar */}
+      {/* Modal: Agregar/Editar con Tallas */}
       {showAddModal && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md p-4 flex items-center justify-center">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl">
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md p-4 flex items-center justify-center overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl my-auto">
             <h2 className="text-2xl font-bold mb-6 text-center">{isEditing ? 'Editar Diseño' : 'Nueva Creación'}</h2>
+            
             <div className="space-y-4">
-              <label className="block w-full h-48 bg-pink-50 rounded-3xl border-4 border-dashed border-pink-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative">
+              <label className="block w-full h-40 bg-pink-50 rounded-3xl border-4 border-dashed border-pink-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative">
                 {newItem.image ? <img src={newItem.image} className="w-full h-full object-contain" /> : <Camera className="text-pink-200" size={40} />}
                 <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
               </label>
-              <select className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-pink-300" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
+
+              <select className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <input type="number" placeholder="Precio COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-pink-300" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
-              <button onClick={saveItem} className="w-full py-4 bg-pink-600 text-white rounded-2xl font-bold shadow-xl active:scale-95 transition-transform">
+
+              {/* Toggle de Tallas */}
+              <div className="flex items-center gap-3 p-2">
+                <input type="checkbox" id="useSizes" checked={useSizes} onChange={e => setUseSizes(e.target.checked)} className="accent-pink-500" />
+                <label htmlFor="useSizes" className="text-sm font-bold text-pink-600">Este producto tiene tallas (XS a XL)</label>
+              </div>
+
+              {useSizes ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {SIZES.map(size => (
+                    <div key={size} className="flex flex-col">
+                      <span className="text-[10px] font-bold ml-2 text-pink-400">Precio {size}</span>
+                      <input 
+                        type="number" 
+                        placeholder={`Precio ${size}`} 
+                        className="p-3 bg-gray-50 rounded-xl text-sm"
+                        value={newItem.sizes[size] || ''}
+                        onChange={e => setNewItem({
+                          ...newItem, 
+                          sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }
+                        })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <input type="number" placeholder="Precio Único COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
+              )}
+
+              <button onClick={saveItem} className="w-full py-4 bg-pink-600 text-white rounded-2xl font-bold shadow-xl">
                 {isEditing ? 'Guardar Cambios' : 'Publicar'}
               </button>
               <button onClick={closeModal} className="w-full text-gray-400 font-bold py-2">Cancelar</button>
