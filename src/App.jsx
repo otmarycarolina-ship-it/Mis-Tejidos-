@@ -22,8 +22,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Vestidos de Bebé", "Tapetes", "Bolsos", "Otros"];
+const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Bebé", "Tapetes", "Bolsos", "Otros"];
 const CLOTHES_SIZES = ["XS", "S", "M", "L", "XL"];
+const BABY_SIZES = ["0-3 Meses", "3-6 Meses", "6-9 Meses", "9-12 Meses", "2 Años", "3 Años"];
 const OBJECT_SIZES = ["Pequeño", "Mediano", "Grande"];
 
 const COLORS = {
@@ -37,7 +38,8 @@ const COLORS = {
 const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselectedSize }) => {
   const hasSizes = item.sizes && Object.keys(item.sizes).length > 0;
   
-  const sizeOrder = [...CLOTHES_SIZES, ...OBJECT_SIZES];
+  // Ordenar las tallas incluyendo las de bebé
+  const sizeOrder = [...BABY_SIZES, ...CLOTHES_SIZES, ...OBJECT_SIZES];
   const sortedSizes = hasSizes 
     ? sizeOrder.filter(size => Object.keys(item.sizes).includes(size))
     : [];
@@ -192,7 +194,10 @@ export default function SakuraApp() {
   const openEdit = (item) => {
     setNewItem({ price: item.price || '', category: item.category, image: item.image, sizes: item.sizes || {} });
     if (item.sizes && Object.keys(item.sizes).length > 0) {
-      setSizeType(Object.keys(item.sizes).includes('XS') ? 'clothes' : 'objects');
+      const keys = Object.keys(item.sizes);
+      if (keys.includes('XS')) setSizeType('clothes');
+      else if (keys.includes('0-3 Meses')) setSizeType('baby');
+      else setSizeType('objects');
     } else {
       setSizeType('none');
     }
@@ -280,7 +285,7 @@ export default function SakuraApp() {
         </button>
       )}
 
-      {/* Modal: ¿Cómo encargar? (AJUSTADO: Tamaño más compacto) */}
+      {/* Modal: ¿Cómo encargar? */}
       {showInfo && (
         <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-4 flex items-center justify-center">
           <div className="bg-white w-full max-w-[340px] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white">
@@ -328,9 +333,10 @@ export default function SakuraApp() {
 
               <div className="bg-pink-50 p-4 rounded-2xl space-y-2">
                 <p className="text-xs font-bold text-pink-600 mb-2">Tipo de Precio:</p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => setSizeType('none')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'none' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Único</button>
                   <button onClick={() => setSizeType('clothes')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'clothes' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Ropa</button>
+                  <button onClick={() => setSizeType('baby')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'baby' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Bebé</button>
                   <button onClick={() => setSizeType('objects')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'objects' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Tamaños</button>
                 </div>
               </div>
@@ -339,7 +345,7 @@ export default function SakuraApp() {
                 <input type="number" placeholder="Precio Único COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
               ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  {(sizeType === 'clothes' ? CLOTHES_SIZES : OBJECT_SIZES).map(size => (
+                  {(sizeType === 'clothes' ? CLOTHES_SIZES : sizeType === 'baby' ? BABY_SIZES : OBJECT_SIZES).map(size => (
                     <div key={size} className="flex flex-col">
                       <span className="text-[10px] font-bold ml-2 text-pink-400">{size}</span>
                       <input type="number" placeholder="Precio" className="p-3 bg-gray-50 rounded-xl text-sm" value={newItem.sizes[size] || ''} onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }})} />
