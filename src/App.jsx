@@ -44,6 +44,9 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
 
   const [selectedSize, setSelectedSize] = useState(preselectedSize || (hasSizes ? sortedSizes[0] : null));
   const currentPrice = hasSizes ? (item.sizes[selectedSize] || 0) : (item.price || 0);
+  
+  // Obtener la descripción de medida si existe para la talla seleccionada
+  const currentMeasure = item.measurements ? item.measurements[selectedSize] : '';
 
   return (
     <div className="bg-white rounded-[3rem] p-4 shadow-xl transition-all">
@@ -60,7 +63,7 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
         <h3 className="text-2xl font-black mb-1" style={{ color: COLORS.deepRose }}>{item.category}</h3>
         
         {hasSizes && (
-          <div className="flex flex-wrap justify-center gap-2 mb-3">
+          <div className="flex flex-wrap justify-center gap-2 mb-1">
             {sortedSizes.map(size => (
               <button
                 key={size}
@@ -76,6 +79,13 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
           </div>
         )}
 
+        {/* Mostrar medidas en cm si el usuario las agregó */}
+        {currentMeasure && (
+          <p className="text-[10px] font-bold text-pink-400 mb-2 uppercase tracking-tight">
+            {currentMeasure}
+          </p>
+        )}
+
         <p className="text-xl font-bold mb-4">
           {currentPrice ? currentPrice.toLocaleString() : '0'} COP 
           <span className="text-sm text-pink-400 ml-1">
@@ -84,7 +94,7 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
         </p>
 
         {!isLocked && (
-          <button onClick={() => sendWhatsApp(item, selectedSize, currentPrice)}
+          <button onClick={() => sendWhatsApp(item, selectedSize, currentPrice, currentMeasure)}
             className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 shadow-pink-200"
             style={{ backgroundColor: COLORS.sakuraPink }}
           >
@@ -116,7 +126,7 @@ export default function SakuraApp() {
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [sizeType, setSizeType] = useState('none');
-  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {}, isPerUnit: false });
+  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {}, measurements: {}, isPerUnit: false });
 
   const [lockedItem, setLockedItem] = useState(null);
   const [lockedSize, setLockedSize] = useState(null);
@@ -177,7 +187,8 @@ export default function SakuraApp() {
     const finalData = {
       ...newItem,
       price: sizeType !== 'none' ? 0 : parseFloat(newItem.price || 0),
-      sizes: sizeType !== 'none' ? newItem.sizes : {}
+      sizes: sizeType !== 'none' ? newItem.sizes : {},
+      measurements: sizeType !== 'none' ? newItem.measurements : {}
     };
 
     try {
@@ -197,6 +208,7 @@ export default function SakuraApp() {
         category: item.category, 
         image: item.image, 
         sizes: item.sizes || {},
+        measurements: item.measurements || {},
         isPerUnit: item.isPerUnit || false 
     });
     if (item.sizes && Object.keys(item.sizes).length > 0) {
@@ -216,14 +228,14 @@ export default function SakuraApp() {
     setShowAddModal(false);
     setIsEditing(false);
     setSizeType('none');
-    setNewItem({ price: '', category: 'Blusas', image: '', sizes: {}, isPerUnit: false });
+    setNewItem({ price: '', category: 'Blusas', image: '', sizes: {}, measurements: {}, isPerUnit: false });
   };
 
-  const sendWhatsApp = (item, selectedSize, currentPrice) => {
+  const sendWhatsApp = (item, selectedSize, currentPrice, currentMeasure) => {
     const phoneNumber = "584226388324";
     const baseUrl = window.location.origin + window.location.pathname;
     const productLink = `${baseUrl}?id=${item.id}${selectedSize ? `&size=${encodeURIComponent(selectedSize)}` : ''}`;
-    const tallaInfo = selectedSize ? `\n*Talla/Tamaño:* ${selectedSize}` : '';
+    const tallaInfo = selectedSize ? `\n*Talla/Tamaño:* ${selectedSize}${currentMeasure ? ` (${currentMeasure})` : ''}` : '';
     const unitInfo = item.isPerUnit ? ' (por unidad)' : '';
     const precioFinal = currentPrice ? currentPrice.toLocaleString() : '0';
     
@@ -339,7 +351,6 @@ export default function SakuraApp() {
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
 
-              {/* Ajuste: Switch para "Cada Unidad" */}
               <div className="flex items-center justify-between bg-pink-50 p-4 rounded-2xl border border-pink-100">
                 <span className="font-bold text-pink-600 text-sm">¿Precio por unidad (c/u)?</span>
                 <button 
@@ -363,11 +374,26 @@ export default function SakuraApp() {
               {sizeType === 'none' ? (
                 <input type="number" placeholder="Precio COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-3">
                   {(sizeType === 'clothes' ? CLOTHES_SIZES : sizeType === 'baby' ? BABY_SIZES : OBJECT_SIZES).map(size => (
-                    <div key={size} className="flex flex-col">
-                      <span className="text-[10px] font-bold ml-2 text-pink-400">{size}</span>
-                      <input type="number" placeholder="Precio" className="p-3 bg-gray-50 rounded-xl text-sm" value={newItem.sizes[size] || ''} onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }})} />
+                    <div key={size} className="bg-pink-50/50 p-3 rounded-2xl border border-pink-100">
+                      <span className="text-[11px] font-black ml-1 text-pink-500 uppercase">{size}</span>
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <input 
+                          type="number" 
+                          placeholder="Precio" 
+                          className="p-3 bg-white rounded-xl text-sm border-none shadow-inner" 
+                          value={newItem.sizes[size] || ''} 
+                          onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }})} 
+                        />
+                        <input 
+                          type="text" 
+                          placeholder="Ej: 20 cm" 
+                          className="p-3 bg-white rounded-xl text-sm border-none shadow-inner" 
+                          value={newItem.measurements[size] || ''} 
+                          onChange={e => setNewItem({ ...newItem, measurements: { ...newItem.measurements, [size]: e.target.value }})} 
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
