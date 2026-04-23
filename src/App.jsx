@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { 
-  Plus, Trash2, Info, Lock, Unlock, MessageCircle, Heart, Sparkles, X, Camera, Pencil, Wallet, Clock, AlertCircle, CheckCircle, Ruler
+  Plus, Trash2, Info, Lock, Unlock, MessageCircle, Heart, Sparkles, X, Camera, Pencil, Wallet, Clock, AlertCircle, CheckCircle
 } from 'lucide-react';
 
 const firebaseConfig = {
@@ -44,6 +44,7 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
 
   const [selectedSize, setSelectedSize] = useState(preselectedSize || (hasSizes ? sortedSizes[0] : null));
   const currentPrice = hasSizes ? (item.sizes[selectedSize] || 0) : (item.price || 0);
+  const currentCm = item.measurements ? item.measurements[selectedSize] : null;
 
   return (
     <div className="bg-white rounded-[3rem] p-4 shadow-xl transition-all">
@@ -76,19 +77,19 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
           </div>
         )}
 
-        <p className="text-xl font-bold mb-4">
+        <p className="text-xl font-bold mb-1">
           {currentPrice ? currentPrice.toLocaleString() : '0'} COP 
           <span className="text-sm text-pink-400 ml-1">
             {item.isPerUnit ? 'c/u' : ''} {selectedSize ? `(${selectedSize})` : ''}
           </span>
         </p>
-
-        {item.measurements && (
-          <p className="text-xs text-gray-400 mb-4 italic">Medidas: {item.measurements} cm</p>
+        
+        {currentCm && (
+          <p className="text-xs text-pink-300 font-bold mb-4 italic">{currentCm} cm aprox.</p>
         )}
 
         {!isLocked && (
-          <button onClick={() => sendWhatsApp(item, selectedSize, currentPrice)}
+          <button onClick={() => sendWhatsApp(item, selectedSize, currentPrice, currentCm)}
             className="w-full py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95 shadow-pink-200"
             style={{ backgroundColor: COLORS.sakuraPink }}
           >
@@ -120,7 +121,7 @@ export default function SakuraApp() {
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [sizeType, setSizeType] = useState('none');
-  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {}, isPerUnit: false, measurements: '' });
+  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {}, measurements: {}, isPerUnit: false });
 
   const [lockedItem, setLockedItem] = useState(null);
   const [lockedSize, setLockedSize] = useState(null);
@@ -181,7 +182,8 @@ export default function SakuraApp() {
     const finalData = {
       ...newItem,
       price: sizeType !== 'none' ? 0 : parseFloat(newItem.price || 0),
-      sizes: sizeType !== 'none' ? newItem.sizes : {}
+      sizes: sizeType !== 'none' ? newItem.sizes : {},
+      measurements: sizeType === 'objects' ? newItem.measurements : {}
     };
 
     try {
@@ -201,8 +203,8 @@ export default function SakuraApp() {
         category: item.category, 
         image: item.image, 
         sizes: item.sizes || {},
-        isPerUnit: item.isPerUnit || false,
-        measurements: item.measurements || ''
+        measurements: item.measurements || {},
+        isPerUnit: item.isPerUnit || false 
     });
     if (item.sizes && Object.keys(item.sizes).length > 0) {
       const keys = Object.keys(item.sizes);
@@ -221,19 +223,19 @@ export default function SakuraApp() {
     setShowAddModal(false);
     setIsEditing(false);
     setSizeType('none');
-    setNewItem({ price: '', category: 'Blusas', image: '', sizes: {}, isPerUnit: false, measurements: '' });
+    setNewItem({ price: '', category: 'Blusas', image: '', sizes: {}, measurements: {}, isPerUnit: false });
   };
 
-  const sendWhatsApp = (item, selectedSize, currentPrice) => {
+  const sendWhatsApp = (item, selectedSize, currentPrice, currentCm) => {
     const phoneNumber = "584226388324";
     const baseUrl = window.location.origin + window.location.pathname;
     const productLink = `${baseUrl}?id=${item.id}${selectedSize ? `&size=${encodeURIComponent(selectedSize)}` : ''}`;
     const tallaInfo = selectedSize ? `\n*Talla/Tamaño:* ${selectedSize}` : '';
-    const medidaInfo = item.measurements ? `\n*Medidas:* ${item.measurements} cm` : '';
+    const cmInfo = currentCm ? ` (${currentCm} cm)` : '';
     const unitInfo = item.isPerUnit ? ' (por unidad)' : '';
     const precioFinal = currentPrice ? currentPrice.toLocaleString() : '0';
     
-    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${unitInfo}${tallaInfo}${medidaInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
+    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${unitInfo}${tallaInfo}${cmInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -345,7 +347,6 @@ export default function SakuraApp() {
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
 
-              {/* Switch para "Cada Unidad" */}
               <div className="flex items-center justify-between bg-pink-50 p-4 rounded-2xl border border-pink-100">
                 <span className="font-bold text-pink-600 text-sm">¿Precio por unidad (c/u)?</span>
                 <button 
@@ -354,21 +355,6 @@ export default function SakuraApp() {
                 >
                   <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${newItem.isPerUnit ? 'left-7' : 'left-1'}`} />
                 </button>
-              </div>
-
-              {/* NUEVA SECCIÓN: Medidas Opcionales */}
-              <div className="bg-white p-4 rounded-2xl border-2 border-pink-100 space-y-2">
-                <div className="flex items-center gap-2 text-pink-400 mb-1">
-                  <Ruler size={16} />
-                  <span className="text-xs font-bold uppercase tracking-wider">Medidas (Opcional)</span>
-                </div>
-                <input 
-                  type="text" 
-                  placeholder="Ej: 20x15 o 30 cm" 
-                  className="w-full p-3 bg-gray-50 rounded-xl text-sm border-none" 
-                  value={newItem.measurements || ''} 
-                  onChange={e => setNewItem({...newItem, measurements: e.target.value})} 
-                />
               </div>
 
               <div className="bg-pink-50 p-4 rounded-2xl space-y-2">
@@ -384,11 +370,14 @@ export default function SakuraApp() {
               {sizeType === 'none' ? (
                 <input type="number" placeholder="Precio COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-x-2 gap-y-4">
                   {(sizeType === 'clothes' ? CLOTHES_SIZES : sizeType === 'baby' ? BABY_SIZES : OBJECT_SIZES).map(size => (
-                    <div key={size} className="flex flex-col">
-                      <span className="text-[10px] font-bold ml-2 text-pink-400">{size}</span>
+                    <div key={size} className="flex flex-col gap-1">
+                      <span className="text-[10px] font-bold ml-2 text-pink-500 uppercase">{size}</span>
                       <input type="number" placeholder="Precio" className="p-3 bg-gray-50 rounded-xl text-sm" value={newItem.sizes[size] || ''} onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }})} />
+                      {sizeType === 'objects' && (
+                        <input type="text" placeholder="cm" className="p-2 bg-pink-50/50 rounded-lg text-[10px] border-none" value={newItem.measurements[size] || ''} onChange={e => setNewItem({ ...newItem, measurements: { ...newItem.measurements, [size]: e.target.value }})} />
+                      )}
                     </div>
                   ))}
                 </div>
