@@ -38,14 +38,16 @@ const COLORS = {
 const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselectedSize }) => {
   const hasSizes = item.sizes && Object.keys(item.sizes).length > 0;
   
-  // Ordenar las tallas incluyendo las de bebé
+  // Orden unificado de todas las tallas para que aparezcan bien
   const sizeOrder = [...BABY_SIZES, ...CLOTHES_SIZES, ...OBJECT_SIZES];
   const sortedSizes = hasSizes 
     ? sizeOrder.filter(size => Object.keys(item.sizes).includes(size))
     : [];
 
   const [selectedSize, setSelectedSize] = useState(preselectedSize || (hasSizes ? sortedSizes[0] : null));
-  const currentPrice = hasSizes ? item.sizes[selectedSize] : item.price;
+  
+  // Corregido: Se asegura de obtener el precio basado en la talla seleccionada
+  const currentPrice = hasSizes ? (item.sizes[selectedSize] || 0) : (item.price || 0);
 
   return (
     <div className="bg-white rounded-[3rem] p-4 shadow-xl transition-all">
@@ -195,8 +197,8 @@ export default function SakuraApp() {
     setNewItem({ price: item.price || '', category: item.category, image: item.image, sizes: item.sizes || {} });
     if (item.sizes && Object.keys(item.sizes).length > 0) {
       const keys = Object.keys(item.sizes);
-      if (keys.includes('XS')) setSizeType('clothes');
-      else if (keys.includes('0-3 Meses')) setSizeType('baby');
+      if (keys.some(k => BABY_SIZES.includes(k))) setSizeType('baby');
+      else if (keys.includes('XS')) setSizeType('clothes');
       else setSizeType('objects');
     } else {
       setSizeType('none');
@@ -216,10 +218,11 @@ export default function SakuraApp() {
   const sendWhatsApp = (item, selectedSize, currentPrice) => {
     const phoneNumber = "584226388324";
     const baseUrl = window.location.origin + window.location.pathname;
-    const productLink = `${baseUrl}?id=${item.id}${selectedSize ? `&size=${selectedSize}` : ''}`;
+    const productLink = `${baseUrl}?id=${item.id}${selectedSize ? `&size=${encodeURIComponent(selectedSize)}` : ''}`;
     const tallaInfo = selectedSize ? `\n*Talla/Tamaño:* ${selectedSize}` : '';
+    const precioFinal = currentPrice ? currentPrice.toLocaleString() : '0';
     
-    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${tallaInfo}\n*Precio:* ${currentPrice.toLocaleString()} COP\n\nLink del pedido:\n${productLink}`;
+    const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${tallaInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
     window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -270,7 +273,7 @@ export default function SakuraApp() {
           ) : lockedItem ? (
             <div className="col-span-full max-w-md mx-auto w-full">
               <h2 className="text-center font-bold text-pink-400 mb-4 uppercase tracking-widest text-sm">Resumen de tu pedido</h2>
-              <ProductCard item={lockedItem} isAdmin={false} isLocked={true} preselectedSize={lockedSize} />
+              <ProductCard item={lockedItem} isAdmin={false} isLocked={true} preselectedSize={lockedSize} sendWhatsApp={sendWhatsApp} />
               <button onClick={() => window.location.href = window.location.pathname} className="w-full mt-6 text-pink-400 font-bold py-2">Ver todo el catálogo</button>
             </div>
           ) : filteredItems.map(item => (
