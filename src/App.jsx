@@ -37,7 +37,6 @@ const COLORS = {
 const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselectedSize }) => {
   const hasSizes = item.sizes && Object.keys(item.sizes).length > 0;
   
-  // Ordenar las tallas correctamente antes de mostrarlas
   const sizeOrder = [...CLOTHES_SIZES, ...OBJECT_SIZES];
   const sortedSizes = hasSizes 
     ? sizeOrder.filter(size => Object.keys(item.sizes).includes(size))
@@ -281,32 +280,32 @@ export default function SakuraApp() {
         </button>
       )}
 
-      {/* Modal: ¿Cómo encargar? (Versión Corregida) */}
+      {/* Modal: ¿Cómo encargar? (AJUSTADO: Tamaño más compacto) */}
       {showInfo && (
-        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-6 flex items-center justify-center">
-          <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl border-4 border-white">
-            <div className="p-8 text-center bg-pink-50">
-              <Sparkles size={32} color={COLORS.sakuraPink} className="mx-auto mb-2" />
-              <h2 className="text-xl font-black text-pink-600 leading-tight">¿Cómo encargar tu pedido?</h2>
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-4 flex items-center justify-center">
+          <div className="bg-white w-full max-w-[340px] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white">
+            <div className="p-5 text-center bg-pink-50">
+              <Sparkles size={28} color={COLORS.sakuraPink} className="mx-auto mb-1" />
+              <h2 className="text-lg font-black text-pink-600 leading-tight">¿Cómo encargar tu pedido?</h2>
             </div>
-            <div className="p-8 space-y-6 text-center">
-              <div className="space-y-2">
-                <Wallet className="mx-auto text-pink-400" size={24}/>
-                <p className="text-[15px] leading-relaxed">Todos los pedidos se realizan con un <b>anticipo del 50%</b> para asegurar tu lugar en la agenda.</p>
+            <div className="p-6 space-y-4 text-center">
+              <div className="space-y-1">
+                <Wallet className="mx-auto text-pink-400" size={20}/>
+                <p className="text-[14px] leading-relaxed">Todos los pedidos se realizan con un <b>anticipo del 50%</b> para asegurar tu lugar en la agenda.</p>
               </div>
-              <div className="space-y-2">
-                <CheckCircle className="mx-auto text-green-400" size={24}/>
-                <p className="text-[15px] leading-relaxed">Se entrega el pedido cuando se termine de cancelar la otra parte, es decir, <b>el otro 50%</b>.</p>
+              <div className="space-y-1">
+                <CheckCircle className="mx-auto text-green-400" size={20}/>
+                <p className="text-[14px] leading-relaxed">Se entrega el pedido cuando se termine de cancelar la otra parte, es decir, <b>el otro 50%</b>.</p>
               </div>
-              <div className="space-y-2">
-                <AlertCircle className="mx-auto text-red-300" size={24}/>
-                <p className="text-[15px] leading-relaxed">En caso de cancelación de algún pedido <b>no se devolverá el anticipo</b>.</p>
+              <div className="space-y-1">
+                <AlertCircle className="mx-auto text-red-300" size={20}/>
+                <p className="text-[14px] leading-relaxed">En caso de cancelación de algún pedido <b>no se devolverá el anticipo</b>.</p>
               </div>
-              <div className="space-y-2">
-                <Clock className="mx-auto text-amber-300" size={24}/>
-                <p className="text-[15px] leading-relaxed">Como son piezas hechas a mano, el <b>tiempo de entrega varía</b> según el diseño.</p>
+              <div className="space-y-1">
+                <Clock className="mx-auto text-amber-300" size={20}/>
+                <p className="text-[14px] leading-relaxed">Como son piezas hechas a mano, el <b>tiempo de entrega varía</b> según el diseño.</p>
               </div>
-              <button onClick={() => setShowInfo(false)} className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold mt-4 shadow-lg shadow-pink-100">¡Entendido! ♡</button>
+              <button onClick={() => setShowInfo(false)} className="w-full py-3.5 bg-pink-500 text-white rounded-2xl font-bold mt-2 shadow-lg shadow-pink-100 transition-transform active:scale-95">¡Entendido! ♡</button>
             </div>
           </div>
         </div>
