@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { 
-  Plus, Trash2, Info, Lock, Unlock, MessageCircle, Heart, Sparkles, X, Camera, Pencil, Wallet, Clock, AlertCircle
+  Plus, Trash2, Info, Lock, Unlock, MessageCircle, Heart, Sparkles, X, Camera, Pencil, Wallet, Clock, AlertCircle, CheckCircle
 } from 'lucide-react';
 
 const firebaseConfig = {
@@ -36,9 +36,14 @@ const COLORS = {
 
 const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselectedSize }) => {
   const hasSizes = item.sizes && Object.keys(item.sizes).length > 0;
-  // Si viene bloqueado por URL, usa la talla de la URL, si no, la primera disponible
-  const [selectedSize, setSelectedSize] = useState(preselectedSize || (hasSizes ? Object.keys(item.sizes)[0] : null));
+  
+  // Ordenar las tallas correctamente antes de mostrarlas
+  const sizeOrder = [...CLOTHES_SIZES, ...OBJECT_SIZES];
+  const sortedSizes = hasSizes 
+    ? sizeOrder.filter(size => Object.keys(item.sizes).includes(size))
+    : [];
 
+  const [selectedSize, setSelectedSize] = useState(preselectedSize || (hasSizes ? sortedSizes[0] : null));
   const currentPrice = hasSizes ? item.sizes[selectedSize] : item.price;
 
   return (
@@ -57,10 +62,10 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
         
         {hasSizes && (
           <div className="flex flex-wrap justify-center gap-2 mb-3">
-            {Object.keys(item.sizes).map(size => (
+            {sortedSizes.map(size => (
               <button
                 key={size}
-                disabled={isLocked} // Bloquear cambio si viene de un link de pedido
+                disabled={isLocked}
                 onClick={() => setSelectedSize(size)}
                 className={`px-3 py-1 rounded-lg text-xs font-bold border-2 transition-all
                   ${selectedSize === size ? 'bg-pink-500 border-pink-500 text-white' : 'bg-white border-pink-100 text-pink-300'}
@@ -109,7 +114,7 @@ export default function SakuraApp() {
   
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [sizeType, setSizeType] = useState('none'); // 'none', 'clothes', 'objects'
+  const [sizeType, setSizeType] = useState('none');
   const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {} });
 
   const [lockedItem, setLockedItem] = useState(null);
@@ -207,7 +212,6 @@ export default function SakuraApp() {
   const sendWhatsApp = (item, selectedSize, currentPrice) => {
     const phoneNumber = "584226388324";
     const baseUrl = window.location.origin + window.location.pathname;
-    // Agregamos la talla al enlace para que al abrirlo quede bloqueada
     const productLink = `${baseUrl}?id=${item.id}${selectedSize ? `&size=${selectedSize}` : ''}`;
     const tallaInfo = selectedSize ? `\n*Talla/Tamaño:* ${selectedSize}` : '';
     
@@ -225,7 +229,7 @@ export default function SakuraApp() {
             <Heart size={22} fill={COLORS.sakuraPink} color={COLORS.sakuraPink} />
             <h1 className="text-xl font-black" style={{ color: COLORS.deepRose }}>Mis Tejidos</h1>
           </div>
-          <span className="text-[10px] uppercase tracking-[0.2em] font-bold ml-7 text-pink-400">Hecho con amor</span>
+          <span className="text-[10px] uppercase tracking-[0.2em] font-bold ml-7 text-pink-400">Hechos con amor</span>
         </div>
         {!lockedItem && (
           <div className="flex gap-3">
@@ -242,7 +246,6 @@ export default function SakuraApp() {
         )}
       </header>
 
-      {/* Categorías (Ocultas si es link directo) */}
       {!lockedItem && (
         <div className="flex overflow-x-auto p-4 gap-3 no-scrollbar">
           {['Todos', ...CATEGORIES].map(cat => (
@@ -256,7 +259,6 @@ export default function SakuraApp() {
         </div>
       )}
 
-      {/* Grid de Productos */}
       <main className="p-4 flex justify-center">
         <div className="w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-8">
           {loading ? (
@@ -273,14 +275,13 @@ export default function SakuraApp() {
         </div>
       </main>
 
-      {/* Botón Flotante Admin */}
       {isAdmin && !lockedItem && (
         <button onClick={() => setShowAddModal(true)} className="fixed bottom-8 right-8 w-16 h-16 bg-pink-600 text-white rounded-full shadow-2xl flex items-center justify-center z-50 border-4 border-white">
           <Plus size={32} />
         </button>
       )}
 
-      {/* Modal: ¿Cómo encargar? (Versión Original) */}
+      {/* Modal: ¿Cómo encargar? (Versión Corregida) */}
       {showInfo && (
         <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-6 flex items-center justify-center">
           <div className="bg-white w-full max-w-sm rounded-[3rem] overflow-hidden shadow-2xl border-4 border-white">
@@ -292,6 +293,10 @@ export default function SakuraApp() {
               <div className="space-y-2">
                 <Wallet className="mx-auto text-pink-400" size={24}/>
                 <p className="text-[15px] leading-relaxed">Todos los pedidos se realizan con un <b>anticipo del 50%</b> para asegurar tu lugar en la agenda.</p>
+              </div>
+              <div className="space-y-2">
+                <CheckCircle className="mx-auto text-green-400" size={24}/>
+                <p className="text-[15px] leading-relaxed">Se entrega el pedido cuando se termine de cancelar la otra parte, es decir, <b>el otro 50%</b>.</p>
               </div>
               <div className="space-y-2">
                 <AlertCircle className="mx-auto text-red-300" size={24}/>
@@ -307,7 +312,6 @@ export default function SakuraApp() {
         </div>
       )}
 
-      {/* Modal: Agregar/Editar */}
       {showAddModal && (
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md p-4 flex items-center justify-center overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl my-auto">
@@ -354,7 +358,6 @@ export default function SakuraApp() {
         </div>
       )}
 
-      {/* Login Admin */}
       {showAdminLogin && (
         <div className="fixed inset-0 z-[60] bg-pink-50/90 backdrop-blur-sm flex items-center justify-center p-4">
           <form onSubmit={handleLogin} className="bg-white p-8 rounded-[2.5rem] w-full max-w-xs text-center shadow-xl border border-pink-100">
