@@ -236,7 +236,12 @@ export default function SakuraApp() {
     const precioFinal = currentPrice ? currentPrice.toLocaleString() : '0';
     
     const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${unitInfo}${tallaInfo}${cmInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
-    window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
+    
+    // MODIFICACIÓN TÉCNICA PARA PWA:
+    // 1. Usamos api.whatsapp.com en lugar de wa.me para mejor soporte en apps instaladas.
+    // 2. Usamos window.location.assign para que el navegador no bloquee la acción.
+    const whatsappUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
+    window.location.assign(whatsappUrl);
   };
 
   return (
