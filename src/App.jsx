@@ -237,10 +237,17 @@ export default function SakuraApp() {
     
     const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${unitInfo}${tallaInfo}${cmInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
     
-    // CAMBIO CLAVE: Usamos la URL de la API y cargamos en la misma ventana (location.href)
-    // Esto evita que las PWA bloqueen la acción o abran pestañas en blanco.
+    // SOLUCIÓN DEFINITIVA PARA APP INSTALADA:
+    // Creamos un elemento <a> temporal en memoria y simulamos un clic real del sistema.
+    // Esto es lo único que los teléfonos no bloquean en aplicaciones instaladas.
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
-    window.location.href = whatsappUrl;
+    const link = document.createElement('a');
+    link.href = whatsappUrl;
+    link.target = '_blank'; // Importante para forzar la salida de la app hacia WhatsApp
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
