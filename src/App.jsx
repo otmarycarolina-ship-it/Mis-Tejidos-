@@ -237,11 +237,10 @@ export default function SakuraApp() {
     
     const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${unitInfo}${tallaInfo}${cmInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
     
-    // MODIFICACIÓN TÉCNICA PARA PWA:
-    // 1. Usamos api.whatsapp.com en lugar de wa.me para mejor soporte en apps instaladas.
-    // 2. Usamos window.location.assign para que el navegador no bloquee la acción.
+    // CAMBIO CLAVE: Usamos la URL de la API y cargamos en la misma ventana (location.href)
+    // Esto evita que las PWA bloqueen la acción o abran pestañas en blanco.
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
-    window.location.assign(whatsappUrl);
+    window.location.href = whatsappUrl;
   };
 
   return (
