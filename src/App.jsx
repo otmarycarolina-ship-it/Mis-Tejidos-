@@ -153,6 +153,30 @@ export default function SakuraApp() {
   const [lockedItem, setLockedItem] = useState(null);
   const [lockedSize, setLockedSize] = useState(null);
 
+  // 1. CARGA INMEDIATA DE DATOS (Sin esperar al usuario)
+  useEffect(() => {
+    const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error("Error cargando productos:", error);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. AUTENTICACIÓN OPTIMIZADA
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        signInAnonymously(auth).catch(console.error);
+      }
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const productId = params.get('id');
@@ -165,20 +189,6 @@ export default function SakuraApp() {
       }
     }
   }, [items]);
-
-  useEffect(() => {
-    signInAnonymously(auth).catch(console.error);
-    return onAuthStateChanged(auth, setUser);
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snapshot) => {
-      setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
-  }, [user]);
 
   const filteredItems = useMemo(() => 
     filter === 'Todos' ? items : items.filter(i => i.category === filter)
@@ -327,15 +337,17 @@ export default function SakuraApp() {
         <div className="w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-8">
           {loading ? (
             <div className="col-span-full text-center py-20 text-pink-300">Cargando tus tejidos...</div>
-          ) : lockedItem ? (
-            <div className="col-span-full max-w-md mx-auto w-full">
-              <h2 className="text-center font-bold text-pink-400 mb-4 uppercase tracking-widest text-sm">Resumen de tu pedido</h2>
-              <ProductCard item={lockedItem} isAdmin={false} isLocked={true} preselectedSize={lockedSize} sendWhatsApp={sendWhatsApp} />
-              <button onClick={() => window.location.href = window.location.pathname} className="w-full mt-6 text-pink-400 font-bold py-2">Ver todo el catálogo</button>
-            </div>
-          ) : filteredItems.map(item => (
-            <ProductCard key={item.id} item={item} isAdmin={isAdmin} openEdit={openEdit} sendWhatsApp={sendWhatsApp} />
-          ))}
+          ) : (
+            lockedItem ? (
+              <div className="col-span-full max-w-md mx-auto w-full">
+                <h2 className="text-center font-bold text-pink-400 mb-4 uppercase tracking-widest text-sm">Resumen de tu pedido</h2>
+                <ProductCard item={lockedItem} isAdmin={false} isLocked={true} preselectedSize={lockedSize} sendWhatsApp={sendWhatsApp} />
+                <button onClick={() => window.location.href = window.location.pathname} className="w-full mt-6 text-pink-400 font-bold py-2">Ver todo el catálogo</button>
+              </div>
+            ) : filteredItems.map(item => (
+              <ProductCard key={item.id} item={item} isAdmin={isAdmin} openEdit={openEdit} sendWhatsApp={sendWhatsApp} />
+            ))
+          )}
         </div>
       </main>
 
@@ -345,12 +357,12 @@ export default function SakuraApp() {
         </button>
       )}
 
-      {/* Modal: ¿Cómo encargar? */}
+      {/* Modals... (El resto del código de modales e info se mantiene idéntico) */}
       {showInfo && (
         <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-4 flex items-center justify-center">
           <div className="bg-white w-full max-w-[340px] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white">
             <div className="p-5 text-center bg-pink-50">
-              <Sparkles size={28} color={COLORS.sakuraPink} className="mx-auto mb-1" />
+              <span className="text-2xl">✨</span>
               <h2 className="text-lg font-black text-pink-600 leading-tight">¿Cómo encargar tu pedido?</h2>
             </div>
             <div className="p-6 space-y-4 text-center">
@@ -380,7 +392,6 @@ export default function SakuraApp() {
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-md p-4 flex items-center justify-center overflow-y-auto">
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl my-auto">
             <h2 className="text-2xl font-bold mb-6 text-center">{isEditing ? 'Editar Diseño' : 'Nueva Creación'}</h2>
-            
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2 mb-2">
                 {newItem.image.map((img, idx) => (
@@ -394,21 +405,13 @@ export default function SakuraApp() {
                   <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
                 </label>
               </div>
-
               <select className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-
               <div className="flex items-center justify-between bg-pink-50 p-4 rounded-2xl border border-pink-100">
                 <span className="font-bold text-pink-600 text-sm">¿Precio por unidad (c/u)?</span>
-                <button 
-                  onClick={() => setNewItem({...newItem, isPerUnit: !newItem.isPerUnit})}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${newItem.isPerUnit ? 'bg-pink-500' : 'bg-gray-300'}`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${newItem.isPerUnit ? 'left-7' : 'left-1'}`} />
-                </button>
+                <button onClick={() => setNewItem({...newItem, isPerUnit: !newItem.isPerUnit})} className={`w-12 h-6 rounded-full transition-colors relative ${newItem.isPerUnit ? 'bg-pink-500' : 'bg-gray-300'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${newItem.isPerUnit ? 'left-7' : 'left-1'}`} /></button>
               </div>
-
               <div className="bg-pink-50 p-4 rounded-2xl space-y-2">
                 <p className="text-xs font-bold text-pink-600 mb-2">Tipo de Precio:</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -418,7 +421,6 @@ export default function SakuraApp() {
                   <button onClick={() => setSizeType('objects')} className={`py-2 text-[10px] font-bold rounded-lg border-2 ${sizeType === 'objects' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-pink-300 border-pink-100'}`}>Tamaños</button>
                 </div>
               </div>
-
               {sizeType === 'none' ? (
                 <input type="number" placeholder="Precio COP" className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
               ) : (
@@ -428,23 +430,13 @@ export default function SakuraApp() {
                       <span className="text-[10px] font-bold ml-2 text-pink-500 uppercase">{size}</span>
                       <input type="number" placeholder="Precio" className="p-3 bg-gray-50 rounded-xl text-sm" value={newItem.sizes[size] || ''} onChange={e => setNewItem({ ...newItem, sizes: { ...newItem.sizes, [size]: parseFloat(e.target.value) }})} />
                       {sizeType === 'objects' && (
-                        <input 
-                          type="decimal" 
-                          inputMode="decimal" 
-                          placeholder="cm" 
-                          className="p-2 bg-pink-50/50 rounded-lg text-[10px] border-none" 
-                          value={newItem.measurements[size] || ''} 
-                          onChange={e => setNewItem({ ...newItem, measurements: { ...newItem.measurements, [size]: e.target.value }})} 
-                        />
+                        <input type="decimal" inputMode="decimal" placeholder="cm" className="p-2 bg-pink-50/50 rounded-lg text-[10px] border-none" value={newItem.measurements[size] || ''} onChange={e => setNewItem({ ...newItem, measurements: { ...newItem.measurements, [size]: e.target.value }})} />
                       )}
                     </div>
                   ))}
                 </div>
               )}
-
-              <button onClick={saveItem} className="w-full py-4 bg-pink-600 text-white rounded-2xl font-bold shadow-xl">
-                {isEditing ? 'Guardar Cambios' : 'Publicar'}
-              </button>
+              <button onClick={saveItem} className="w-full py-4 bg-pink-600 text-white rounded-2xl font-bold shadow-xl">{isEditing ? 'Guardar Cambios' : 'Publicar'}</button>
               <button onClick={closeModal} className="w-full text-gray-400 font-bold py-2">Cancelar</button>
             </div>
           </div>
