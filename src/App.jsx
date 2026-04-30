@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { 
-  Plus, Trash2, Info, Lock, Unlock, MessageCircle, Heart, Sparkles, X, Camera, Pencil, Wallet, Clock, AlertCircle, CheckCircle
+  Plus, Trash2, Info, Lock, Unlock, MessageCircle, Heart, Sparkles, X, Camera, Pencil, Wallet, Clock, AlertCircle, CheckCircle, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const firebaseConfig = {
@@ -43,13 +43,40 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
     : [];
 
   const [selectedSize, setSelectedSize] = useState(preselectedSize || (hasSizes ? sortedSizes[0] : null));
+  const [currentImgIndex, setCurrentImgIndex] = useState(0);
+  
   const currentPrice = hasSizes ? (item.sizes[selectedSize] || 0) : (item.price || 0);
   const currentCm = item.measurements ? item.measurements[selectedSize] : null;
+  
+  const images = Array.isArray(item.image) ? item.image : [item.image];
+
+  const nextImg = (e) => {
+    e.stopPropagation();
+    setCurrentImgIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const prevImg = (e) => {
+    e.stopPropagation();
+    setCurrentImgIndex((prev) => (prev - 1 + images.length) % images.length);
+  };
 
   return (
     <div className="bg-white rounded-[3rem] p-4 shadow-xl transition-all">
       <div className="relative aspect-square rounded-[2.2rem] overflow-hidden bg-[#FAF7F2] mb-4 border border-pink-50">
-        <img src={item.image} className="w-full h-full object-contain p-2" alt={item.category} />
+        <img src={images[currentImgIndex]} className="w-full h-full object-contain p-2" alt={item.category} />
+        
+        {images.length > 1 && (
+          <>
+            <button onClick={prevImg} className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/50 p-1 rounded-full text-pink-600"><ChevronLeft size={20}/></button>
+            <button onClick={nextImg} className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/50 p-1 rounded-full text-pink-600"><ChevronRight size={20}/></button>
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1">
+              {images.map((_, i) => (
+                <div key={i} className={`w-1.5 h-1.5 rounded-full ${i === currentImgIndex ? 'bg-pink-500' : 'bg-pink-200'}`} />
+              ))}
+            </div>
+          </>
+        )}
+
         {isAdmin && !isLocked && (
           <div className="absolute top-4 right-4 flex flex-col gap-2">
             <button onClick={() => openEdit(item)} className="bg-white/90 p-3 rounded-2xl text-blue-500 shadow-lg"><Pencil size={20} /></button>
@@ -121,7 +148,7 @@ export default function SakuraApp() {
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [sizeType, setSizeType] = useState('none');
-  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: '', sizes: {}, measurements: {}, isPerUnit: false });
+  const [newItem, setNewItem] = useState({ price: '', category: 'Blusas', image: [], sizes: {}, measurements: {}, isPerUnit: false });
 
   const [lockedItem, setLockedItem] = useState(null);
   const [lockedSize, setLockedSize] = useState(null);
@@ -167,17 +194,26 @@ export default function SakuraApp() {
   };
 
   const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
       const reader = new FileReader();
-      reader.onloadend = () => setNewItem(prev => ({ ...prev, image: reader.result }));
+      reader.onloadend = () => {
+        setNewItem(prev => ({ ...prev, image: [...prev.image, reader.result] }));
+      };
       reader.readAsDataURL(file);
-    }
+    });
+  };
+
+  const removeImage = (index) => {
+    setNewItem(prev => ({
+      ...prev,
+      image: prev.image.filter((_, i) => i !== index)
+    }));
   };
 
   const saveItem = async (e) => {
     e.preventDefault();
-    if (!newItem.image) return alert("Sube una imagen");
+    if (newItem.image.length === 0) return alert("Sube al menos una imagen");
     
     const finalData = {
       ...newItem,
@@ -201,7 +237,7 @@ export default function SakuraApp() {
     setNewItem({ 
         price: item.price || '', 
         category: item.category, 
-        image: item.image, 
+        image: Array.isArray(item.image) ? item.image : [item.image], 
         sizes: item.sizes || {},
         measurements: item.measurements || {},
         isPerUnit: item.isPerUnit || false 
@@ -223,7 +259,7 @@ export default function SakuraApp() {
     setShowAddModal(false);
     setIsEditing(false);
     setSizeType('none');
-    setNewItem({ price: '', category: 'Blusas', image: '', sizes: {}, measurements: {}, isPerUnit: false });
+    setNewItem({ price: '', category: 'Blusas', image: [], sizes: {}, measurements: {}, isPerUnit: false });
   };
 
   const sendWhatsApp = (item, selectedSize, currentPrice, currentCm) => {
@@ -237,13 +273,10 @@ export default function SakuraApp() {
     
     const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${unitInfo}${tallaInfo}${cmInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
     
-    // SOLUCIÓN DEFINITIVA PARA APP INSTALADA:
-    // Creamos un elemento <a> temporal en memoria y simulamos un clic real del sistema.
-    // Esto es lo único que los teléfonos no bloquean en aplicaciones instaladas.
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
     const link = document.createElement('a');
     link.href = whatsappUrl;
-    link.target = '_blank'; // Importante para forzar la salida de la app hacia WhatsApp
+    link.target = '_blank';
     link.rel = 'noopener noreferrer';
     document.body.appendChild(link);
     link.click();
@@ -349,10 +382,18 @@ export default function SakuraApp() {
             <h2 className="text-2xl font-bold mb-6 text-center">{isEditing ? 'Editar Diseño' : 'Nueva Creación'}</h2>
             
             <div className="space-y-4">
-              <label className="block w-full h-40 bg-pink-50 rounded-3xl border-4 border-dashed border-pink-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative">
-                {newItem.image ? <img src={newItem.image} className="w-full h-full object-contain" /> : <Camera className="text-pink-200" size={40} />}
-                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-              </label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {newItem.image.map((img, idx) => (
+                  <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-pink-100">
+                    <img src={img} className="w-full h-full object-cover" />
+                    <button onClick={() => removeImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-1"><X size={12}/></button>
+                  </div>
+                ))}
+                <label className="w-20 h-20 bg-pink-50 rounded-xl border-2 border-dashed border-pink-200 flex items-center justify-center cursor-pointer">
+                  <Camera className="text-pink-200" size={24} />
+                  <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
+                </label>
+              </div>
 
               <select className="w-full p-4 bg-gray-50 rounded-2xl border-none" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
