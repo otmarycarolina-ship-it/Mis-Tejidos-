@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, query, orderBy, updateDoc 
+  getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, query, orderBy, updateDoc, enableIndexedDbPersistence 
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { 
@@ -18,9 +18,18 @@ const firebaseConfig = {
   measurementId: "G-Y6HL27L34Y"
 };
 
+// Inicialización ultra-rápida
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Habilitar persistencia de datos (esto hace que cargue al instante tras la primera visita)
+try {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') console.log("Persistencia falló: múltiples pestañas");
+    else if (err.code === 'unimplemented') console.log("El navegador no soporta persistencia");
+  });
+} catch(e) {}
 
 const CATEGORIES = ["Blusas", "Flores", "Llaveros", "Bebé", "Tapetes", "Bolsos", "Otros"];
 const CLOTHES_SIZES = ["XS", "S", "M", "L", "XL"];
@@ -63,7 +72,12 @@ const ProductCard = ({ item, isAdmin, openEdit, sendWhatsApp, isLocked, preselec
   return (
     <div className="bg-white rounded-[3rem] p-4 shadow-xl transition-all">
       <div className="relative aspect-square rounded-[2.2rem] overflow-hidden bg-[#FAF7F2] mb-4 border border-pink-50">
-        <img src={images[currentImgIndex]} className="w-full h-full object-contain p-2" alt={item.category} />
+        <img 
+          src={images[currentImgIndex]} 
+          className="w-full h-full object-contain p-2" 
+          alt={item.category}
+          loading="lazy" 
+        />
         
         {images.length > 1 && (
           <>
@@ -153,26 +167,28 @@ export default function SakuraApp() {
   const [lockedItem, setLockedItem] = useState(null);
   const [lockedSize, setLockedSize] = useState(null);
 
-  // 1. CARGA INMEDIATA DE DATOS (Sin esperar al usuario)
+  // CARGA DE DATOS PRIORITARIA
   useEffect(() => {
     const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    
+    // onSnapshot es rápido porque usa caché local automáticamente si está habilitado
+    const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setItems(data);
       setLoading(false);
     }, (error) => {
       console.error("Error cargando productos:", error);
+      setLoading(false);
     });
+    
     return () => unsubscribe();
   }, []);
 
-  // 2. AUTENTICACIÓN OPTIMIZADA
+  // AUTENTICACIÓN SILENCIOSA
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
-        signInAnonymously(auth).catch(console.error);
-      }
+      if (currentUser) setUser(currentUser);
+      else signInAnonymously(auth).catch(() => {});
     });
     return () => unsubscribeAuth();
   }, []);
@@ -284,13 +300,7 @@ export default function SakuraApp() {
     const message = `¡Hola Otmary! ✨ Me interesa encargar este diseño:\n\n*Producto:* ${item.category}${unitInfo}${tallaInfo}${cmInfo}\n*Precio:* ${precioFinal} COP\n\nLink del pedido:\n${productLink}`;
     
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
-    const link = document.createElement('a');
-    link.href = whatsappUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    window.open(whatsappUrl, '_blank');
   };
 
   return (
@@ -335,7 +345,7 @@ export default function SakuraApp() {
 
       <main className="p-4 flex justify-center">
         <div className="w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-8">
-          {loading ? (
+          {loading && items.length === 0 ? (
             <div className="col-span-full text-center py-20 text-pink-300">Cargando tus tejidos...</div>
           ) : (
             lockedItem ? (
@@ -357,7 +367,6 @@ export default function SakuraApp() {
         </button>
       )}
 
-      {/* Modals... (El resto del código de modales e info se mantiene idéntico) */}
       {showInfo && (
         <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm p-4 flex items-center justify-center">
           <div className="bg-white w-full max-w-[340px] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white">
@@ -396,7 +405,7 @@ export default function SakuraApp() {
               <div className="flex flex-wrap gap-2 mb-2">
                 {newItem.image.map((img, idx) => (
                   <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-pink-100">
-                    <img src={img} className="w-full h-full object-cover" />
+                    <img src={img} className="w-full h-full object-cover" alt="upload-preview" />
                     <button onClick={() => removeImage(idx)} className="absolute top-0 right-0 bg-red-500 text-white p-1"><X size={12}/></button>
                   </div>
                 ))}
