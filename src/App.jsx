@@ -212,7 +212,7 @@ export default function SakuraApp() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (adminPass === '1206') { 
+    if (adminPass === '11289561') { 
       setIsAdmin(true); 
       setShowAdminLogin(false); 
       setAdminPass(''); 
